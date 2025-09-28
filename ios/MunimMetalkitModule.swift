@@ -55,7 +55,7 @@ public class MunimMetalkitModule: Module {
       
       return [
         "name": device.name,
-        "maxThreadsPerGroup": device.maxThreadsPerGroup,
+        "maxThreadsPerGroup": device.maxThreadsPerThreadgroup.width,
         "maxThreadgroupMemoryLength": device.maxThreadgroupMemoryLength
       ]
     }
@@ -620,7 +620,7 @@ public class MunimMetalkitModule: Module {
     case "RGBA16Float": return .rgba16Float
     case "RGBA32Float": return .rgba32Float
     case "Depth32Float": return .depth32Float
-    case "Depth24Unorm_Stencil8": return .depth24Unorm_stencil8
+    case "Depth24Unorm_Stencil8": return .depth32Float_stencil8
     case "Depth32Float_Stencil8": return .depth32Float_stencil8
     default: return .bgra8Unorm
     }
@@ -657,7 +657,7 @@ public class MunimMetalkitModule: Module {
   private func parseStorageMode(_ mode: String) -> MTLStorageMode {
     switch mode {
     case "Shared": return .shared
-    case "Managed": return .managed
+    case "Managed": return .shared
     case "Private": return .private
     default: return .private
     }
@@ -665,10 +665,10 @@ public class MunimMetalkitModule: Module {
   
   private func parseResourceOptions(_ options: String) -> MTLResourceOptions {
     switch options {
-    case "CPUCacheModeDefaultCache": return .cpuCacheModeDefaultCache
+    case "CPUCacheModeDefaultCache": return []
     case "CPUCacheModeWriteCombined": return .cpuCacheModeWriteCombined
     case "StorageModeShared": return .storageModeShared
-    case "StorageModeManaged": return .storageModeManaged
+    case "StorageModeManaged": return .storageModeShared
     case "StorageModePrivate": return .storageModePrivate
     default: return .storageModePrivate
     }
