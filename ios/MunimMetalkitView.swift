@@ -15,14 +15,14 @@ public class MunimMetalkitView: ExpoView {
   private var renderer: SCNRenderer?
   
   // Rendering properties
-  private var preferredFramesPerSecond: Int = 60
-  private var enableSetNeedsDisplay: Bool = true
-  private var autoResizeDrawable: Bool = true
-  private var drawableSize: CGSize = .zero
-  private var colorPixelFormat: MTLPixelFormat = .bgra8Unorm
-  private var depthStencilPixelFormat: MTLPixelFormat = .depth32Float
-  private var sampleCount: Int = 1
-  private var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+  public var preferredFramesPerSecond: Int = 60
+  public var enableSetNeedsDisplay: Bool = true
+  public var autoResizeDrawable: Bool = true
+  public var drawableSize: CGSize = .zero
+  public var colorPixelFormat: MTLPixelFormat = .bgra8Unorm
+  public var depthStencilPixelFormat: MTLPixelFormat = .depth32Float
+  public var sampleCount: Int = 1
+  public var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
   
   // Scene properties
   private var sceneDescriptor: [String: Any]?
