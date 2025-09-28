@@ -433,3 +433,103 @@ export type MaterialDescriptor = {
   roughnessTexture?: Texture;
   occlusionTexture?: Texture;
 };
+
+// 2D Drawing Types
+export type Point2D = {
+  x: number;
+  y: number;
+};
+
+export type Color2D = {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+};
+
+export type BrushStyle = {
+  color: Color2D;
+  size: number;
+  opacity: number;
+  blendMode?: "normal" | "multiply" | "screen" | "overlay" | "softLight" | "hardLight" | "colorDodge" | "colorBurn" | "darken" | "lighten" | "difference" | "exclusion";
+};
+
+export type LineStyle = {
+  color: Color2D;
+  width: number;
+  capStyle?: "butt" | "round" | "square";
+  joinStyle?: "miter" | "round" | "bevel";
+  dashPattern?: number[];
+};
+
+export type FillStyle = {
+  color: Color2D;
+  pattern?: "solid" | "horizontal" | "vertical" | "diagonal" | "crosshatch";
+};
+
+export type TextStyle = {
+  fontFamily: string;
+  fontSize: number;
+  fontWeight?: "normal" | "bold" | "100" | "200" | "300" | "400" | "500" | "600" | "700" | "800" | "900";
+  fontStyle?: "normal" | "italic" | "oblique";
+  color: Color2D;
+  alignment?: "left" | "center" | "right";
+  baseline?: "top" | "middle" | "bottom" | "alphabetic" | "hanging";
+};
+
+export type Rectangle2D = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type Circle2D = {
+  center: Point2D;
+  radius: number;
+};
+
+export type Ellipse2D = {
+  center: Point2D;
+  radiusX: number;
+  radiusY: number;
+};
+
+export type Path2D = {
+  points: Point2D[];
+  closed: boolean;
+};
+
+export type Canvas2D = {
+  id: string;
+  width: number;
+  height: number;
+  pixelFormat: MTLPixelFormat;
+  texture: Texture;
+};
+
+export type DrawingCommand = {
+  id: string;
+  type: "line" | "rectangle" | "circle" | "ellipse" | "path" | "text" | "image";
+  data: any;
+  style: BrushStyle | LineStyle | FillStyle | TextStyle;
+  timestamp: number;
+};
+
+export type DrawingLayer = {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  blendMode: string;
+  commands: DrawingCommand[];
+};
+
+export type DrawingCanvas = {
+  id: string;
+  width: number;
+  height: number;
+  layers: DrawingLayer[];
+  activeLayerId: string;
+  backgroundColor: Color2D;
+};

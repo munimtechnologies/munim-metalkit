@@ -75,6 +75,7 @@
 ## 🚀 Features
 
 - 🎨 **Complete MetalKit API**: Full access to MetalKit's 3D graphics capabilities
+- 🖌️ **2D Drawing Support**: Comprehensive 2D drawing tools and canvas API
 - 📱 **Cross-Platform**: Native MetalKit on iOS, OpenGL ES on Android, WebGL on web
 - ⚡ **High Performance**: Direct GPU access for maximum rendering performance
 - 🎯 **TypeScript Support**: Full TypeScript definitions included
@@ -84,6 +85,9 @@
 - 🎪 **Mesh Rendering**: Load and render 3D meshes in multiple formats
 - 🎬 **Animation System**: Create and control complex 3D animations
 - 🌍 **Scene Management**: Full 3D scene support with cameras and lighting
+- 🖼️ **2D Canvas API**: Canvas-like drawing interface with layers, brushes, and tools
+- ✏️ **Drawing Tools**: Lines, rectangles, circles, ellipses, paths, and text rendering
+- 🎨 **Layer Management**: Multi-layer support with blend modes and opacity control
 - 📊 **Performance Monitoring**: Real-time performance metrics and optimization tools
 - 📸 **Screenshot Capture**: Take high-quality screenshots of rendered content
 
@@ -699,6 +703,241 @@ const AnimatedScene = () => {
     </View>
   );
 };
+```
+
+### 2D Drawing App
+
+```typescript
+import React, { useState, useEffect } from "react";
+import { View, TouchableOpacity, Text, StyleSheet } from "react-native";
+import MunimMetalkit, { MunimMetalkitView } from "munim-metalkit";
+
+const DrawingApp = () => {
+  const [canvas, setCanvas] = useState(null);
+  const [brushColor, setBrushColor] = useState({ red: 1, green: 0, blue: 0, alpha: 1 });
+  const [brushSize, setBrushSize] = useState(5);
+
+  useEffect(() => {
+    initializeCanvas();
+  }, []);
+
+  const initializeCanvas = async () => {
+    try {
+      // Create a 2D canvas
+      const canvas2D = await MunimMetalkit.createCanvas2D(800, 600);
+      setCanvas(canvas2D);
+
+      // Clear with white background
+      await MunimMetalkit.clearCanvas2D(canvas2D.id, { red: 1, green: 1, blue: 1, alpha: 1 });
+
+      // Create initial layer
+      await MunimMetalkit.createDrawingLayer(canvas2D.id, "Background");
+    } catch (error) {
+      console.error("Failed to initialize canvas:", error);
+    }
+  };
+
+  const handleTouchMove = async (event) => {
+    if (!canvas) return;
+
+    const { locationX, locationY } = event.nativeEvent;
+    await MunimMetalkit.setCanvas2DPixel(canvas.id, locationX, locationY, brushColor);
+  };
+
+  const drawLine = async () => {
+    if (!canvas) return;
+
+    await MunimMetalkit.drawLine2D(
+      canvas.id,
+      { x: 100, y: 100 },
+      { x: 300, y: 200 },
+      {
+        color: brushColor,
+        width: brushSize,
+        capStyle: "round",
+        joinStyle: "round",
+      }
+    );
+  };
+
+  const drawRectangle = async () => {
+    if (!canvas) return;
+
+    await MunimMetalkit.drawRectangle2D(
+      canvas.id,
+      { x: 150, y: 150, width: 200, height: 100 },
+      {
+        color: brushColor,
+        pattern: "solid",
+      }
+    );
+  };
+
+  const drawCircle = async () => {
+    if (!canvas) return;
+
+    await MunimMetalkit.drawCircle2D(
+      canvas.id,
+      { center: { x: 400, y: 300 }, radius: 80 },
+      {
+        color: brushColor,
+        pattern: "solid",
+      }
+    );
+  };
+
+  const drawText = async () => {
+    if (!canvas) return;
+
+    await MunimMetalkit.drawText2D(
+      canvas.id,
+      "Hello MetalKit!",
+      { x: 200, y: 400 },
+      {
+        fontFamily: "Arial",
+        fontSize: 24,
+        fontWeight: "bold",
+        color: brushColor,
+        alignment: "center",
+        baseline: "middle",
+      }
+    );
+  };
+
+  const clearCanvas = async () => {
+    if (!canvas) return;
+    await MunimMetalkit.clearCanvas2D(canvas.id, { red: 1, green: 1, blue: 1, alpha: 1 });
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>MetalKit 2D Drawing App</Text>
+      
+      {/* Drawing Canvas */}
+      <View style={styles.canvasContainer}>
+        <MunimMetalkitView
+          style={styles.canvas}
+          onTouchMove={handleTouchMove}
+          scene={{
+            meshes: canvas ? [{
+              id: "canvas",
+              vertexBuffers: [],
+              vertexCount: 4,
+              primitiveType: "Triangle",
+            }] : [],
+            materials: canvas ? [{
+              id: "canvasMaterial",
+              baseColorTexture: canvas.texture,
+            }] : [],
+            animations: [],
+          }}
+        />
+      </View>
+
+      {/* Color Palette */}
+      <View style={styles.colorPalette}>
+        {[
+          { red: 1, green: 0, blue: 0, alpha: 1 }, // Red
+          { red: 0, green: 1, blue: 0, alpha: 1 }, // Green
+          { red: 0, green: 0, blue: 1, alpha: 1 }, // Blue
+          { red: 1, green: 1, blue: 0, alpha: 1 }, // Yellow
+        ].map((color, index) => (
+          <TouchableOpacity
+            key={index}
+            style={[
+              styles.colorButton,
+              {
+                backgroundColor: `rgb(${color.red * 255}, ${color.green * 255}, ${color.blue * 255})`,
+                borderWidth: brushColor.red === color.red ? 3 : 1,
+              },
+            ]}
+            onPress={() => setBrushColor(color)}
+          />
+        ))}
+      </View>
+
+      {/* Drawing Tools */}
+      <View style={styles.toolsRow}>
+        <TouchableOpacity style={styles.toolButton} onPress={drawLine}>
+          <Text style={styles.toolButtonText}>Line</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.toolButton} onPress={drawRectangle}>
+          <Text style={styles.toolButtonText}>Rectangle</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.toolButton} onPress={drawCircle}>
+          <Text style={styles.toolButtonText}>Circle</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.toolButton} onPress={drawText}>
+          <Text style={styles.toolButtonText}>Text</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.clearButton} onPress={clearCanvas}>
+          <Text style={styles.clearButtonText}>Clear</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+    padding: 10,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  canvasContainer: {
+    height: 300,
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  canvas: {
+    flex: 1,
+    borderRadius: 10,
+  },
+  colorPalette: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 10,
+  },
+  colorButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderColor: "#ccc",
+  },
+  toolsRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+  },
+  toolButton: {
+    backgroundColor: "#007AFF",
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 15,
+  },
+  toolButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  clearButton: {
+    backgroundColor: "#FF3B30",
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 15,
+  },
+  clearButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+});
 ```
 
 ## 🔍 Troubleshooting

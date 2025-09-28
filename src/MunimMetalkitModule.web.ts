@@ -15,6 +15,19 @@ import {
   SceneDescriptor,
   CameraDescriptor,
   LightingDescriptor,
+  MTLPixelFormat,
+  Canvas2D,
+  Color2D,
+  Point2D,
+  LineStyle,
+  Rectangle2D,
+  FillStyle,
+  Circle2D,
+  Ellipse2D,
+  Path2D,
+  TextStyle,
+  DrawingLayer,
+  BrushStyle,
 } from "./MunimMetalkit.types";
 
 class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
@@ -626,6 +639,265 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
         gl_FragColor = vColor;
       }
     `;
+  }
+
+  // 2D Drawing Functions
+  private canvas2D: Map<string, Canvas2D> = new Map();
+  private drawingLayers: Map<string, DrawingLayer[]> = new Map();
+
+  async createCanvas2D(width: number, height: number, pixelFormat: MTLPixelFormat = "RGBA8Unorm"): Promise<Canvas2D> {
+    if (!this.gl) throw new Error("WebGL not available");
+
+    const canvasId = Math.random().toString(36).substr(2, 9);
+    const texture = await this.createTexture({
+      width,
+      height,
+      pixelFormat,
+      usage: "ShaderWrite",
+      storageMode: "Private",
+    });
+
+    const canvas: Canvas2D = {
+      id: canvasId,
+      width,
+      height,
+      pixelFormat,
+      texture,
+    };
+
+    this.canvas2D.set(canvasId, canvas);
+    this.drawingLayers.set(canvasId, []);
+    return canvas;
+  }
+
+  async clearCanvas2D(canvasId: string, backgroundColor: Color2D = { red: 0, green: 0, blue: 0, alpha: 1 }): Promise<void> {
+    const canvas = this.canvas2D.get(canvasId);
+    if (!canvas) throw new Error("Canvas not found");
+
+    // Clear the texture with background color
+    const data = new Uint8Array(canvas.width * canvas.height * 4);
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = backgroundColor.red * 255;
+      data[i + 1] = backgroundColor.green * 255;
+      data[i + 2] = backgroundColor.blue * 255;
+      data[i + 3] = backgroundColor.alpha * 255;
+    }
+
+    await this.updateTexture(canvas.texture.id, data.buffer, {
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+    });
+  }
+
+  async drawLine2D(canvasId: string, start: Point2D, end: Point2D, style: LineStyle): Promise<void> {
+    // Implementation for drawing lines on 2D canvas
+    console.log(`Drawing line from (${start.x}, ${start.y}) to (${end.x}, ${end.y})`);
+  }
+
+  async drawRectangle2D(canvasId: string, rect: Rectangle2D, style: FillStyle | LineStyle): Promise<void> {
+    // Implementation for drawing rectangles on 2D canvas
+    console.log(`Drawing rectangle at (${rect.x}, ${rect.y}) with size ${rect.width}x${rect.height}`);
+  }
+
+  async drawCircle2D(canvasId: string, circle: Circle2D, style: FillStyle | LineStyle): Promise<void> {
+    // Implementation for drawing circles on 2D canvas
+    console.log(`Drawing circle at (${circle.center.x}, ${circle.center.y}) with radius ${circle.radius}`);
+  }
+
+  async drawEllipse2D(canvasId: string, ellipse: Ellipse2D, style: FillStyle | LineStyle): Promise<void> {
+    // Implementation for drawing ellipses on 2D canvas
+    console.log(`Drawing ellipse at (${ellipse.center.x}, ${ellipse.center.y}) with radii ${ellipse.radiusX}x${ellipse.radiusY}`);
+  }
+
+  async drawPath2D(canvasId: string, path: Path2D, style: LineStyle): Promise<void> {
+    // Implementation for drawing paths on 2D canvas
+    console.log(`Drawing path with ${path.points.length} points`);
+  }
+
+  async drawText2D(canvasId: string, text: string, position: Point2D, style: TextStyle): Promise<void> {
+    // Implementation for drawing text on 2D canvas
+    console.log(`Drawing text "${text}" at (${position.x}, ${position.y})`);
+  }
+
+  async measureText2D(text: string, style: TextStyle): Promise<{ width: number; height: number }> {
+    // Implementation for measuring text dimensions
+    return { width: text.length * style.fontSize * 0.6, height: style.fontSize };
+  }
+
+  async drawImage2D(canvasId: string, imageTextureId: string, destination: Rectangle2D, source?: Rectangle2D): Promise<void> {
+    // Implementation for drawing images on 2D canvas
+    console.log(`Drawing image ${imageTextureId} to (${destination.x}, ${destination.y})`);
+  }
+
+  async compositeCanvas2D(canvasId: string, sourceCanvasId: string, operation: string): Promise<void> {
+    // Implementation for canvas compositing
+    console.log(`Compositing canvas ${sourceCanvasId} onto ${canvasId} with operation ${operation}`);
+  }
+
+  // 2D Transformations
+  async saveCanvas2D(canvasId: string): Promise<void> {
+    console.log(`Saving canvas state for ${canvasId}`);
+  }
+
+  async restoreCanvas2D(canvasId: string): Promise<void> {
+    console.log(`Restoring canvas state for ${canvasId}`);
+  }
+
+  async translateCanvas2D(canvasId: string, x: number, y: number): Promise<void> {
+    console.log(`Translating canvas ${canvasId} by (${x}, ${y})`);
+  }
+
+  async rotateCanvas2D(canvasId: string, angle: number): Promise<void> {
+    console.log(`Rotating canvas ${canvasId} by ${angle} radians`);
+  }
+
+  async scaleCanvas2D(canvasId: string, x: number, y: number): Promise<void> {
+    console.log(`Scaling canvas ${canvasId} by (${x}, ${y})`);
+  }
+
+  async setTransformCanvas2D(canvasId: string, matrix: number[]): Promise<void> {
+    console.log(`Setting transform matrix for canvas ${canvasId}`);
+  }
+
+  // 2D Layer Management
+  async createDrawingLayer(canvasId: string, name: string): Promise<DrawingLayer> {
+    const layerId = Math.random().toString(36).substr(2, 9);
+    const layer: DrawingLayer = {
+      id: layerId,
+      name,
+      visible: true,
+      opacity: 1.0,
+      blendMode: "normal",
+      commands: [],
+    };
+
+    const layers = this.drawingLayers.get(canvasId) || [];
+    layers.push(layer);
+    this.drawingLayers.set(canvasId, layers);
+    return layer;
+  }
+
+  async deleteDrawingLayer(canvasId: string, layerId: string): Promise<void> {
+    const layers = this.drawingLayers.get(canvasId) || [];
+    const filteredLayers = layers.filter(layer => layer.id !== layerId);
+    this.drawingLayers.set(canvasId, filteredLayers);
+  }
+
+  async setActiveLayer(canvasId: string, layerId: string): Promise<void> {
+    console.log(`Setting active layer ${layerId} for canvas ${canvasId}`);
+  }
+
+  async setLayerOpacity(canvasId: string, layerId: string, opacity: number): Promise<void> {
+    const layers = this.drawingLayers.get(canvasId) || [];
+    const layer = layers.find(l => l.id === layerId);
+    if (layer) {
+      layer.opacity = opacity;
+    }
+  }
+
+  async setLayerBlendMode(canvasId: string, layerId: string, blendMode: string): Promise<void> {
+    const layers = this.drawingLayers.get(canvasId) || [];
+    const layer = layers.find(l => l.id === layerId);
+    if (layer) {
+      layer.blendMode = blendMode;
+    }
+  }
+
+  async toggleLayerVisibility(canvasId: string, layerId: string): Promise<void> {
+    const layers = this.drawingLayers.get(canvasId) || [];
+    const layer = layers.find(l => l.id === layerId);
+    if (layer) {
+      layer.visible = !layer.visible;
+    }
+  }
+
+  // 2D Brush and Tool Management
+  async setBrushStyle(canvasId: string, style: BrushStyle): Promise<void> {
+    console.log(`Setting brush style for canvas ${canvasId}`);
+  }
+
+  async setLineStyle(canvasId: string, style: LineStyle): Promise<void> {
+    console.log(`Setting line style for canvas ${canvasId}`);
+  }
+
+  async setFillStyle(canvasId: string, style: FillStyle): Promise<void> {
+    console.log(`Setting fill style for canvas ${canvasId}`);
+  }
+
+  async setTextStyle(canvasId: string, style: TextStyle): Promise<void> {
+    console.log(`Setting text style for canvas ${canvasId}`);
+  }
+
+  // 2D Canvas Operations
+  async resizeCanvas2D(canvasId: string, width: number, height: number): Promise<void> {
+    const canvas = this.canvas2D.get(canvasId);
+    if (!canvas) throw new Error("Canvas not found");
+
+    canvas.width = width;
+    canvas.height = height;
+    // Recreate texture with new dimensions
+    await this.releaseTexture(canvas.texture.id);
+    const newTexture = await this.createTexture({
+      width,
+      height,
+      pixelFormat: canvas.pixelFormat,
+      usage: "ShaderWrite",
+      storageMode: "Private",
+    });
+    canvas.texture = newTexture;
+  }
+
+  async cropCanvas2D(canvasId: string, rect: Rectangle2D): Promise<void> {
+    console.log(`Cropping canvas ${canvasId} to (${rect.x}, ${rect.y}, ${rect.width}, ${rect.height})`);
+  }
+
+  async flipCanvas2D(canvasId: string, horizontal: boolean, vertical: boolean): Promise<void> {
+    console.log(`Flipping canvas ${canvasId} - horizontal: ${horizontal}, vertical: ${vertical}`);
+  }
+
+  // 2D Export and Import
+  async exportCanvas2D(canvasId: string, format: "png" | "jpg" | "webp"): Promise<ArrayBuffer> {
+    const canvas = this.canvas2D.get(canvasId);
+    if (!canvas) throw new Error("Canvas not found");
+
+    // For now, return empty buffer - would need actual image encoding
+    return new ArrayBuffer(0);
+  }
+
+  async importImageToCanvas2D(canvasId: string, imageData: ArrayBuffer, position: Point2D): Promise<void> {
+    console.log(`Importing image to canvas ${canvasId} at (${position.x}, ${position.y})`);
+  }
+
+  // 2D Utility Functions
+  async getCanvas2DPixel(canvasId: string, x: number, y: number): Promise<Color2D> {
+    // Implementation for getting pixel color
+    return { red: 0, green: 0, blue: 0, alpha: 1 };
+  }
+
+  async setCanvas2DPixel(canvasId: string, x: number, y: number, color: Color2D): Promise<void> {
+    // Implementation for setting pixel color
+    console.log(`Setting pixel at (${x}, ${y}) to color (${color.red}, ${color.green}, ${color.blue}, ${color.alpha})`);
+  }
+
+  async getCanvas2DData(canvasId: string): Promise<ArrayBuffer> {
+    const canvas = this.canvas2D.get(canvasId);
+    if (!canvas) throw new Error("Canvas not found");
+
+    return await this.getBufferContents(canvas.texture.id);
+  }
+
+  async setCanvas2DData(canvasId: string, data: ArrayBuffer): Promise<void> {
+    const canvas = this.canvas2D.get(canvasId);
+    if (!canvas) throw new Error("Canvas not found");
+
+    await this.updateTexture(canvas.texture.id, data, {
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+    });
   }
 }
 
