@@ -347,7 +347,7 @@ public class MunimMetalkitModule: Module {
         throw MetalError.deviceNotAvailable
       }
       
-      let allocator = MDLMeshBufferAllocator(device: device)
+      let allocator = MDLMeshBufferAllocator()
       let mesh = MDLMesh(allocator: allocator)
       
       let meshId = UUID().uuidString
