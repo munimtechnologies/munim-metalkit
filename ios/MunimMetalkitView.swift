@@ -297,11 +297,8 @@ public class MunimMetalkitView: ExpoView {
   private func updatePerformanceMetrics() {
     frameCount += 1
     
-    // Send performance event
-    sendEvent("onRender", [
-      "frameTime": CACurrentMediaTime() - frameStartTime,
-      "drawableCount": frameCount
-    ])
+    // Performance metrics are tracked but events are sent from the module
+    // The view focuses on rendering, not event dispatching
   }
 }
 
