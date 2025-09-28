@@ -165,7 +165,7 @@ public class MunimMetalkitModule: Module {
       )
       
       let bytesPerPixel = 4 // Assuming RGBA
-      let bytesPerRow = region.width * bytesPerPixel
+      let bytesPerRow = region.size.width * bytesPerPixel
       let data = Data(data)
       
       texture.replace(region: region, mipmapLevel: 0, withBytes: data.withUnsafeBytes { $0.baseAddress! }, bytesPerRow: bytesPerRow)
