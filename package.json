@@ -21,7 +21,10 @@
     "munim-metalkit",
     "MunimMetalkit"
   ],
-  "repository": "https://github.com/munimtechnologies/munim-metalkit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/munimtechnologies/munim-metalkit.git"
+  },
   "bugs": {
     "url": "https://github.com/munimtechnologies/munim-metalkit/issues"
   },
