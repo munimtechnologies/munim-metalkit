@@ -1,6 +1,6 @@
 {
   "name": "munim-metalkit",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Complete MetalKit implementation for React Native with cross-platform support",
   "main": "build/index.js",
   "types": "build/index.d.ts",
