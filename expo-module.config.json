@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android", "web"],
+  "apple": {
+    "modules": ["MunimMetalkitModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.munimmetalkit.MunimMetalkitModule"]
+  }
+}

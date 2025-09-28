@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "munim-metalkit": ["../src/index"],
+      "munim-metalkit/*": ["../src/*"]
+    }
+  }
+}
