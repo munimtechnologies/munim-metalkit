@@ -285,7 +285,7 @@ public class MunimMetalkitModule: Module {
       // Configure color attachments
       if let colorAttachments = descriptor["colorAttachments"] as? [[String: Any]] {
         for (index, attachment) in colorAttachments.enumerated() {
-          if index < pipelineDescriptor.colorAttachments.count {
+          if index < 8 { // Metal supports up to 8 color attachments
             let colorAttachment = pipelineDescriptor.colorAttachments[index]
             colorAttachment?.pixelFormat = self.parsePixelFormat(attachment["pixelFormat"] as? String ?? "BGRA8Unorm")
             colorAttachment?.isBlendingEnabled = attachment["isBlendingEnabled"] as? Bool ?? false
