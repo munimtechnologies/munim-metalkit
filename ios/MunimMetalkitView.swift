@@ -104,7 +104,7 @@ public class MunimMetalkitView: ExpoView {
     renderer?.scene = scene
   }
   
-  override func layoutSubviews() {
+  public override func layoutSubviews() {
     super.layoutSubviews()
     metalView?.frame = bounds
     
@@ -287,7 +287,8 @@ public class MunimMetalkitView: ExpoView {
     metalView?.isPaused = false
   }
   
-  func setNeedsDisplay() {
+  public override func setNeedsDisplay() {
+    super.setNeedsDisplay()
     metalView?.setNeedsDisplay()
   }
   

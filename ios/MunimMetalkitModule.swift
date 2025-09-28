@@ -21,7 +21,7 @@ public class MunimMetalkitModule: Module {
   private var meshes: [String: MDLMesh] = [:]
   private var animations: [String: CAAnimation] = [:]
   
-  public override func definition() -> ModuleDefinition {
+  public func definition() -> ModuleDefinition {
     Name("MunimMetalkit")
 
     // Constants

@@ -812,7 +812,7 @@ const DrawingApp = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>MetalKit 2D Drawing App</Text>
-      
+
       {/* Drawing Canvas */}
       <View style={styles.canvasContainer}>
         <MunimMetalkitView

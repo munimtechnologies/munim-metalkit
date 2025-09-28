@@ -16,8 +16,15 @@ export default function DrawingApp() {
   const [canvas, setCanvas] = useState<any>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushSize, setBrushSize] = useState(5);
-  const [brushColor, setBrushColor] = useState({ red: 1, green: 0, blue: 0, alpha: 1 });
-  const [drawingMode, setDrawingMode] = useState<"brush" | "line" | "rectangle" | "circle" | "text">("brush");
+  const [brushColor, setBrushColor] = useState({
+    red: 1,
+    green: 0,
+    blue: 0,
+    alpha: 1,
+  });
+  const [drawingMode, setDrawingMode] = useState<
+    "brush" | "line" | "rectangle" | "circle" | "text"
+  >("brush");
   const [layers, setLayers] = useState<any[]>([]);
   const [activeLayer, setActiveLayer] = useState<string | null>(null);
 
@@ -43,10 +50,18 @@ export default function DrawingApp() {
       setCanvas(canvas2D);
 
       // Clear with white background
-      await MunimMetalkit.clearCanvas2D(canvas2D.id, { red: 1, green: 1, blue: 1, alpha: 1 });
+      await MunimMetalkit.clearCanvas2D(canvas2D.id, {
+        red: 1,
+        green: 1,
+        blue: 1,
+        alpha: 1,
+      });
 
       // Create initial layer
-      const layer = await MunimMetalkit.createDrawingLayer(canvas2D.id, "Background");
+      const layer = await MunimMetalkit.createDrawingLayer(
+        canvas2D.id,
+        "Background"
+      );
       setLayers([layer]);
       setActiveLayer(layer.id);
 
@@ -63,7 +78,12 @@ export default function DrawingApp() {
     setIsDrawing(true);
 
     if (drawingMode === "brush") {
-      await MunimMetalkit.setCanvas2DPixel(canvas.id, locationX, locationY, brushColor);
+      await MunimMetalkit.setCanvas2DPixel(
+        canvas.id,
+        locationX,
+        locationY,
+        brushColor
+      );
     }
   };
 
@@ -73,7 +93,12 @@ export default function DrawingApp() {
     const { locationX, locationY } = event.nativeEvent;
 
     if (drawingMode === "brush") {
-      await MunimMetalkit.setCanvas2DPixel(canvas.id, locationX, locationY, brushColor);
+      await MunimMetalkit.setCanvas2DPixel(
+        canvas.id,
+        locationX,
+        locationY,
+        brushColor
+      );
     }
   };
 
@@ -161,7 +186,12 @@ export default function DrawingApp() {
     if (!canvas) return;
 
     try {
-      await MunimMetalkit.clearCanvas2D(canvas.id, { red: 1, green: 1, blue: 1, alpha: 1 });
+      await MunimMetalkit.clearCanvas2D(canvas.id, {
+        red: 1,
+        green: 1,
+        blue: 1,
+        alpha: 1,
+      });
       Alert.alert("Success", "Canvas cleared!");
     } catch (error) {
       Alert.alert("Error", `Failed to clear canvas: ${error}`);
@@ -173,7 +203,10 @@ export default function DrawingApp() {
 
     try {
       const imageData = await MunimMetalkit.exportCanvas2D(canvas.id, "png");
-      Alert.alert("Success", `Canvas exported! Size: ${imageData.byteLength} bytes`);
+      Alert.alert(
+        "Success",
+        `Canvas exported! Size: ${imageData.byteLength} bytes`
+      );
     } catch (error) {
       Alert.alert("Error", `Failed to export canvas: ${error}`);
     }
@@ -183,8 +216,11 @@ export default function DrawingApp() {
     if (!canvas) return;
 
     try {
-      const layer = await MunimMetalkit.createDrawingLayer(canvas.id, `Layer ${layers.length + 1}`);
-      setLayers(prev => [...prev, layer]);
+      const layer = await MunimMetalkit.createDrawingLayer(
+        canvas.id,
+        `Layer ${layers.length + 1}`
+      );
+      setLayers((prev) => [...prev, layer]);
       setActiveLayer(layer.id);
       Alert.alert("Success", `Created new layer: ${layer.name}`);
     } catch (error) {
@@ -192,7 +228,15 @@ export default function DrawingApp() {
     }
   };
 
-  const ColorButton = ({ color, onPress, isSelected }: { color: any; onPress: () => void; isSelected: boolean }) => (
+  const ColorButton = ({
+    color,
+    onPress,
+    isSelected,
+  }: {
+    color: any;
+    onPress: () => void;
+    isSelected: boolean;
+  }) => (
     <TouchableOpacity
       style={[
         styles.colorButton,
@@ -206,7 +250,15 @@ export default function DrawingApp() {
     />
   );
 
-  const ToolButton = ({ title, mode, onPress }: { title: string; mode: string; onPress: () => void }) => (
+  const ToolButton = ({
+    title,
+    mode,
+    onPress,
+  }: {
+    title: string;
+    mode: string;
+    onPress: () => void;
+  }) => (
     <TouchableOpacity
       style={[
         styles.toolButton,
@@ -214,7 +266,12 @@ export default function DrawingApp() {
       ]}
       onPress={onPress}
     >
-      <Text style={[styles.toolButtonText, { color: drawingMode === mode ? "white" : "black" }]}>
+      <Text
+        style={[
+          styles.toolButtonText,
+          { color: drawingMode === mode ? "white" : "black" },
+        ]}
+      >
         {title}
       </Text>
     </TouchableOpacity>
@@ -223,7 +280,7 @@ export default function DrawingApp() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>MetalKit 2D Drawing App</Text>
-      
+
       {/* Drawing Canvas */}
       <View style={styles.canvasContainer}>
         <MunimMetalkitView
@@ -232,19 +289,32 @@ export default function DrawingApp() {
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           scene={{
-            meshes: canvas ? [{
-              id: "canvas",
-              vertexBuffers: [],
-              vertexCount: 4,
-              primitiveType: "Triangle",
-            }] : [],
-            materials: canvas ? [{
-              id: "canvasMaterial",
-              baseColorTexture: canvas.texture,
-            }] : [],
+            meshes: canvas
+              ? [
+                  {
+                    id: "canvas",
+                    vertexBuffers: [],
+                    vertexCount: 4,
+                    primitiveType: "Triangle",
+                  },
+                ]
+              : [],
+            materials: canvas
+              ? [
+                  {
+                    id: "canvasMaterial",
+                    baseColorTexture: canvas.texture,
+                  },
+                ]
+              : [],
             animations: [],
             ambientLightColor: { red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0 },
-            directionalLightColor: { red: 1.0, green: 1.0, blue: 1.0, alpha: 1.0 },
+            directionalLightColor: {
+              red: 1.0,
+              green: 1.0,
+              blue: 1.0,
+              alpha: 1.0,
+            },
             directionalLightDirection: { x: 0, y: -1, z: 0 },
           }}
           camera={{
@@ -268,7 +338,11 @@ export default function DrawingApp() {
               key={index}
               color={color}
               onPress={() => setBrushColor(color)}
-              isSelected={brushColor.red === color.red && brushColor.green === color.green && brushColor.blue === color.blue}
+              isSelected={
+                brushColor.red === color.red &&
+                brushColor.green === color.green &&
+                brushColor.blue === color.blue
+              }
             />
           ))}
         </View>
@@ -287,7 +361,12 @@ export default function DrawingApp() {
               ]}
               onPress={() => setBrushSize(size)}
             >
-              <Text style={[styles.brushSizeText, { color: brushSize === size ? "white" : "black" }]}>
+              <Text
+                style={[
+                  styles.brushSizeText,
+                  { color: brushSize === size ? "white" : "black" },
+                ]}
+              >
                 {size}
               </Text>
             </TouchableOpacity>
@@ -299,11 +378,31 @@ export default function DrawingApp() {
       <View style={styles.toolsContainer}>
         <Text style={styles.sectionTitle}>Tools</Text>
         <View style={styles.toolsRow}>
-          <ToolButton title="Brush" mode="brush" onPress={() => setDrawingMode("brush")} />
-          <ToolButton title="Line" mode="line" onPress={() => setDrawingMode("line")} />
-          <ToolButton title="Rectangle" mode="rectangle" onPress={() => setDrawingMode("rectangle")} />
-          <ToolButton title="Circle" mode="circle" onPress={() => setDrawingMode("circle")} />
-          <ToolButton title="Text" mode="text" onPress={() => setDrawingMode("text")} />
+          <ToolButton
+            title="Brush"
+            mode="brush"
+            onPress={() => setDrawingMode("brush")}
+          />
+          <ToolButton
+            title="Line"
+            mode="line"
+            onPress={() => setDrawingMode("line")}
+          />
+          <ToolButton
+            title="Rectangle"
+            mode="rectangle"
+            onPress={() => setDrawingMode("rectangle")}
+          />
+          <ToolButton
+            title="Circle"
+            mode="circle"
+            onPress={() => setDrawingMode("circle")}
+          />
+          <ToolButton
+            title="Text"
+            mode="text"
+            onPress={() => setDrawingMode("text")}
+          />
         </View>
       </View>
 
@@ -333,16 +432,27 @@ export default function DrawingApp() {
                 key={layer.id}
                 style={[
                   styles.layerButton,
-                  { backgroundColor: activeLayer === layer.id ? "#007AFF" : "#f0f0f0" },
+                  {
+                    backgroundColor:
+                      activeLayer === layer.id ? "#007AFF" : "#f0f0f0",
+                  },
                 ]}
                 onPress={() => setActiveLayer(layer.id)}
               >
-                <Text style={[styles.layerButtonText, { color: activeLayer === layer.id ? "white" : "black" }]}>
+                <Text
+                  style={[
+                    styles.layerButtonText,
+                    { color: activeLayer === layer.id ? "white" : "black" },
+                  ]}
+                >
                   {layer.name}
                 </Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.addLayerButton} onPress={createNewLayer}>
+            <TouchableOpacity
+              style={styles.addLayerButton}
+              onPress={createNewLayer}
+            >
               <Text style={styles.addLayerButtonText}>+</Text>
             </TouchableOpacity>
           </View>
@@ -517,3 +627,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 });
+

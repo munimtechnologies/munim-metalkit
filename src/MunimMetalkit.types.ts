@@ -451,7 +451,19 @@ export type BrushStyle = {
   color: Color2D;
   size: number;
   opacity: number;
-  blendMode?: "normal" | "multiply" | "screen" | "overlay" | "softLight" | "hardLight" | "colorDodge" | "colorBurn" | "darken" | "lighten" | "difference" | "exclusion";
+  blendMode?:
+    | "normal"
+    | "multiply"
+    | "screen"
+    | "overlay"
+    | "softLight"
+    | "hardLight"
+    | "colorDodge"
+    | "colorBurn"
+    | "darken"
+    | "lighten"
+    | "difference"
+    | "exclusion";
 };
 
 export type LineStyle = {
@@ -470,7 +482,18 @@ export type FillStyle = {
 export type TextStyle = {
   fontFamily: string;
   fontSize: number;
-  fontWeight?: "normal" | "bold" | "100" | "200" | "300" | "400" | "500" | "600" | "700" | "800" | "900";
+  fontWeight?:
+    | "normal"
+    | "bold"
+    | "100"
+    | "200"
+    | "300"
+    | "400"
+    | "500"
+    | "600"
+    | "700"
+    | "800"
+    | "900";
   fontStyle?: "normal" | "italic" | "oblique";
   color: Color2D;
   alignment?: "left" | "center" | "right";

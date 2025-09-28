@@ -645,7 +645,11 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
   private canvas2D: Map<string, Canvas2D> = new Map();
   private drawingLayers: Map<string, DrawingLayer[]> = new Map();
 
-  async createCanvas2D(width: number, height: number, pixelFormat: MTLPixelFormat = "RGBA8Unorm"): Promise<Canvas2D> {
+  async createCanvas2D(
+    width: number,
+    height: number,
+    pixelFormat: MTLPixelFormat = "RGBA8Unorm"
+  ): Promise<Canvas2D> {
     if (!this.gl) throw new Error("WebGL not available");
 
     const canvasId = Math.random().toString(36).substr(2, 9);
@@ -670,7 +674,10 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
     return canvas;
   }
 
-  async clearCanvas2D(canvasId: string, backgroundColor: Color2D = { red: 0, green: 0, blue: 0, alpha: 1 }): Promise<void> {
+  async clearCanvas2D(
+    canvasId: string,
+    backgroundColor: Color2D = { red: 0, green: 0, blue: 0, alpha: 1 }
+  ): Promise<void> {
     const canvas = this.canvas2D.get(canvasId);
     if (!canvas) throw new Error("Canvas not found");
 
@@ -691,49 +698,102 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
     });
   }
 
-  async drawLine2D(canvasId: string, start: Point2D, end: Point2D, style: LineStyle): Promise<void> {
+  async drawLine2D(
+    canvasId: string,
+    start: Point2D,
+    end: Point2D,
+    style: LineStyle
+  ): Promise<void> {
     // Implementation for drawing lines on 2D canvas
-    console.log(`Drawing line from (${start.x}, ${start.y}) to (${end.x}, ${end.y})`);
+    console.log(
+      `Drawing line from (${start.x}, ${start.y}) to (${end.x}, ${end.y})`
+    );
   }
 
-  async drawRectangle2D(canvasId: string, rect: Rectangle2D, style: FillStyle | LineStyle): Promise<void> {
+  async drawRectangle2D(
+    canvasId: string,
+    rect: Rectangle2D,
+    style: FillStyle | LineStyle
+  ): Promise<void> {
     // Implementation for drawing rectangles on 2D canvas
-    console.log(`Drawing rectangle at (${rect.x}, ${rect.y}) with size ${rect.width}x${rect.height}`);
+    console.log(
+      `Drawing rectangle at (${rect.x}, ${rect.y}) with size ${rect.width}x${rect.height}`
+    );
   }
 
-  async drawCircle2D(canvasId: string, circle: Circle2D, style: FillStyle | LineStyle): Promise<void> {
+  async drawCircle2D(
+    canvasId: string,
+    circle: Circle2D,
+    style: FillStyle | LineStyle
+  ): Promise<void> {
     // Implementation for drawing circles on 2D canvas
-    console.log(`Drawing circle at (${circle.center.x}, ${circle.center.y}) with radius ${circle.radius}`);
+    console.log(
+      `Drawing circle at (${circle.center.x}, ${circle.center.y}) with radius ${circle.radius}`
+    );
   }
 
-  async drawEllipse2D(canvasId: string, ellipse: Ellipse2D, style: FillStyle | LineStyle): Promise<void> {
+  async drawEllipse2D(
+    canvasId: string,
+    ellipse: Ellipse2D,
+    style: FillStyle | LineStyle
+  ): Promise<void> {
     // Implementation for drawing ellipses on 2D canvas
-    console.log(`Drawing ellipse at (${ellipse.center.x}, ${ellipse.center.y}) with radii ${ellipse.radiusX}x${ellipse.radiusY}`);
+    console.log(
+      `Drawing ellipse at (${ellipse.center.x}, ${ellipse.center.y}) with radii ${ellipse.radiusX}x${ellipse.radiusY}`
+    );
   }
 
-  async drawPath2D(canvasId: string, path: Path2D, style: LineStyle): Promise<void> {
+  async drawPath2D(
+    canvasId: string,
+    path: Path2D,
+    style: LineStyle
+  ): Promise<void> {
     // Implementation for drawing paths on 2D canvas
     console.log(`Drawing path with ${path.points.length} points`);
   }
 
-  async drawText2D(canvasId: string, text: string, position: Point2D, style: TextStyle): Promise<void> {
+  async drawText2D(
+    canvasId: string,
+    text: string,
+    position: Point2D,
+    style: TextStyle
+  ): Promise<void> {
     // Implementation for drawing text on 2D canvas
     console.log(`Drawing text "${text}" at (${position.x}, ${position.y})`);
   }
 
-  async measureText2D(text: string, style: TextStyle): Promise<{ width: number; height: number }> {
+  async measureText2D(
+    text: string,
+    style: TextStyle
+  ): Promise<{ width: number; height: number }> {
     // Implementation for measuring text dimensions
-    return { width: text.length * style.fontSize * 0.6, height: style.fontSize };
+    return {
+      width: text.length * style.fontSize * 0.6,
+      height: style.fontSize,
+    };
   }
 
-  async drawImage2D(canvasId: string, imageTextureId: string, destination: Rectangle2D, source?: Rectangle2D): Promise<void> {
+  async drawImage2D(
+    canvasId: string,
+    imageTextureId: string,
+    destination: Rectangle2D,
+    source?: Rectangle2D
+  ): Promise<void> {
     // Implementation for drawing images on 2D canvas
-    console.log(`Drawing image ${imageTextureId} to (${destination.x}, ${destination.y})`);
+    console.log(
+      `Drawing image ${imageTextureId} to (${destination.x}, ${destination.y})`
+    );
   }
 
-  async compositeCanvas2D(canvasId: string, sourceCanvasId: string, operation: string): Promise<void> {
+  async compositeCanvas2D(
+    canvasId: string,
+    sourceCanvasId: string,
+    operation: string
+  ): Promise<void> {
     // Implementation for canvas compositing
-    console.log(`Compositing canvas ${sourceCanvasId} onto ${canvasId} with operation ${operation}`);
+    console.log(
+      `Compositing canvas ${sourceCanvasId} onto ${canvasId} with operation ${operation}`
+    );
   }
 
   // 2D Transformations
@@ -745,7 +805,11 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
     console.log(`Restoring canvas state for ${canvasId}`);
   }
 
-  async translateCanvas2D(canvasId: string, x: number, y: number): Promise<void> {
+  async translateCanvas2D(
+    canvasId: string,
+    x: number,
+    y: number
+  ): Promise<void> {
     console.log(`Translating canvas ${canvasId} by (${x}, ${y})`);
   }
 
@@ -757,12 +821,18 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
     console.log(`Scaling canvas ${canvasId} by (${x}, ${y})`);
   }
 
-  async setTransformCanvas2D(canvasId: string, matrix: number[]): Promise<void> {
+  async setTransformCanvas2D(
+    canvasId: string,
+    matrix: number[]
+  ): Promise<void> {
     console.log(`Setting transform matrix for canvas ${canvasId}`);
   }
 
   // 2D Layer Management
-  async createDrawingLayer(canvasId: string, name: string): Promise<DrawingLayer> {
+  async createDrawingLayer(
+    canvasId: string,
+    name: string
+  ): Promise<DrawingLayer> {
     const layerId = Math.random().toString(36).substr(2, 9);
     const layer: DrawingLayer = {
       id: layerId,
@@ -781,7 +851,7 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
 
   async deleteDrawingLayer(canvasId: string, layerId: string): Promise<void> {
     const layers = this.drawingLayers.get(canvasId) || [];
-    const filteredLayers = layers.filter(layer => layer.id !== layerId);
+    const filteredLayers = layers.filter((layer) => layer.id !== layerId);
     this.drawingLayers.set(canvasId, filteredLayers);
   }
 
@@ -789,25 +859,36 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
     console.log(`Setting active layer ${layerId} for canvas ${canvasId}`);
   }
 
-  async setLayerOpacity(canvasId: string, layerId: string, opacity: number): Promise<void> {
+  async setLayerOpacity(
+    canvasId: string,
+    layerId: string,
+    opacity: number
+  ): Promise<void> {
     const layers = this.drawingLayers.get(canvasId) || [];
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.find((l) => l.id === layerId);
     if (layer) {
       layer.opacity = opacity;
     }
   }
 
-  async setLayerBlendMode(canvasId: string, layerId: string, blendMode: string): Promise<void> {
+  async setLayerBlendMode(
+    canvasId: string,
+    layerId: string,
+    blendMode: string
+  ): Promise<void> {
     const layers = this.drawingLayers.get(canvasId) || [];
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.find((l) => l.id === layerId);
     if (layer) {
       layer.blendMode = blendMode;
     }
   }
 
-  async toggleLayerVisibility(canvasId: string, layerId: string): Promise<void> {
+  async toggleLayerVisibility(
+    canvasId: string,
+    layerId: string
+  ): Promise<void> {
     const layers = this.drawingLayers.get(canvasId) || [];
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.find((l) => l.id === layerId);
     if (layer) {
       layer.visible = !layer.visible;
     }
@@ -831,7 +912,11 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
   }
 
   // 2D Canvas Operations
-  async resizeCanvas2D(canvasId: string, width: number, height: number): Promise<void> {
+  async resizeCanvas2D(
+    canvasId: string,
+    width: number,
+    height: number
+  ): Promise<void> {
     const canvas = this.canvas2D.get(canvasId);
     if (!canvas) throw new Error("Canvas not found");
 
@@ -850,15 +935,26 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
   }
 
   async cropCanvas2D(canvasId: string, rect: Rectangle2D): Promise<void> {
-    console.log(`Cropping canvas ${canvasId} to (${rect.x}, ${rect.y}, ${rect.width}, ${rect.height})`);
+    console.log(
+      `Cropping canvas ${canvasId} to (${rect.x}, ${rect.y}, ${rect.width}, ${rect.height})`
+    );
   }
 
-  async flipCanvas2D(canvasId: string, horizontal: boolean, vertical: boolean): Promise<void> {
-    console.log(`Flipping canvas ${canvasId} - horizontal: ${horizontal}, vertical: ${vertical}`);
+  async flipCanvas2D(
+    canvasId: string,
+    horizontal: boolean,
+    vertical: boolean
+  ): Promise<void> {
+    console.log(
+      `Flipping canvas ${canvasId} - horizontal: ${horizontal}, vertical: ${vertical}`
+    );
   }
 
   // 2D Export and Import
-  async exportCanvas2D(canvasId: string, format: "png" | "jpg" | "webp"): Promise<ArrayBuffer> {
+  async exportCanvas2D(
+    canvasId: string,
+    format: "png" | "jpg" | "webp"
+  ): Promise<ArrayBuffer> {
     const canvas = this.canvas2D.get(canvasId);
     if (!canvas) throw new Error("Canvas not found");
 
@@ -866,19 +962,36 @@ class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
     return new ArrayBuffer(0);
   }
 
-  async importImageToCanvas2D(canvasId: string, imageData: ArrayBuffer, position: Point2D): Promise<void> {
-    console.log(`Importing image to canvas ${canvasId} at (${position.x}, ${position.y})`);
+  async importImageToCanvas2D(
+    canvasId: string,
+    imageData: ArrayBuffer,
+    position: Point2D
+  ): Promise<void> {
+    console.log(
+      `Importing image to canvas ${canvasId} at (${position.x}, ${position.y})`
+    );
   }
 
   // 2D Utility Functions
-  async getCanvas2DPixel(canvasId: string, x: number, y: number): Promise<Color2D> {
+  async getCanvas2DPixel(
+    canvasId: string,
+    x: number,
+    y: number
+  ): Promise<Color2D> {
     // Implementation for getting pixel color
     return { red: 0, green: 0, blue: 0, alpha: 1 };
   }
 
-  async setCanvas2DPixel(canvasId: string, x: number, y: number, color: Color2D): Promise<void> {
+  async setCanvas2DPixel(
+    canvasId: string,
+    x: number,
+    y: number,
+    color: Color2D
+  ): Promise<void> {
     // Implementation for setting pixel color
-    console.log(`Setting pixel at (${x}, ${y}) to color (${color.red}, ${color.green}, ${color.blue}, ${color.alpha})`);
+    console.log(
+      `Setting pixel at (${x}, ${y}) to color (${color.red}, ${color.green}, ${color.blue}, ${color.alpha})`
+    );
   }
 
   async getCanvas2DData(canvasId: string): Promise<ArrayBuffer> {
