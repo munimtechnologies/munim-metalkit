@@ -1,172 +1,130 @@
 package expo.modules.munimmetalkit
 
-import android.content.Context
-import android.opengl.GLES20
-import android.opengl.GLES30
+import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
-import expo.modules.kotlin.Promise
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.util.*
 
+/**
+ * Metal is Apple-only, so on Android the module is an honest stub: `isMetalAvailable()` returns
+ * false and every async method rejects with ERR_METAL_UNAVAILABLE. (1.x shipped an unregistered
+ * OpenGL ES renderer and a createTexture that never had a GL context; both were removed.)
+ */
 class MunimMetalkitModule : Module() {
-  private val textures = mutableMapOf<String, Int>()
-  private val buffers = mutableMapOf<String, ByteBuffer>()
-  private val shaders = mutableMapOf<String, Int>()
-  private val programs = mutableMapOf<String, Int>()
-  private val meshes = mutableMapOf<String, MeshData>()
-  private val animations = mutableMapOf<String, AnimationData>()
-  
-  private var isOpenGLAvailable = false
-  private var maxTextureSize = 0
-  private var maxVertexAttribs = 0
-  private var maxTextureImageUnits = 0
-
   override fun definition() = ModuleDefinition {
     Name("MunimMetalkit")
 
-    // Constants
-    Constant("PI") {
-      Math.PI
-    }
+    Constant("PI") { Math.PI }
 
-    // Events
-    Events("onChange", "onRender", "onError", "onAnimationComplete")
+    Function("isMetalAvailable") { false }
 
-    // Basic functions
-    Function("hello") {
-      "Hello world! 👋"
-    }
-
-    AsyncFunction("setValueAsync") { value: String ->
-      sendEvent("onChange", mapOf(
-        "value" to value
-      ))
-    }
-
-    // Device and Context
-    Function("isMetalAvailable") {
-      isOpenGLAvailable
-    }
-
-    AsyncFunction("getDeviceInfo") { promise: Promise ->
-      try {
-        val context = appContext.currentActivity?.applicationContext
-        if (context != null) {
-          val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-          val deviceInfo = activityManager.deviceConfigurationInfo
-          
-          promise.resolve(mapOf(
-            "name" to (deviceInfo.glVersion ?: "Unknown"),
-            "maxThreadsPerGroup" to maxVertexAttribs,
-            "maxThreadgroupMemoryLength" to maxTextureImageUnits
-          ))
-        } else {
-          promise.resolve(mapOf(
-            "name" to "Unknown",
-            "maxThreadsPerGroup" to 0,
-            "maxThreadgroupMemoryLength" to 0
-          ))
-        }
-      } catch (e: Exception) {
-        promise.reject("DEVICE_INFO_ERROR", "Failed to get device info", e)
+    // Arity per method, so calls with the documented arguments reach the rejection below
+    // instead of failing on an argument-count mismatch.
+    for ((name, arity) in ASYNC_METHODS) {
+      when (arity) {
+        0 -> AsyncFunction(name) { -> throw MetalUnavailableException(name) }
+        1 -> AsyncFunction(name) { _: Any? -> throw MetalUnavailableException(name) }
+        2 -> AsyncFunction(name) { _: Any?, _: Any? -> throw MetalUnavailableException(name) }
+        3 -> AsyncFunction(name) { _: Any?, _: Any?, _: Any? -> throw MetalUnavailableException(name) }
+        else -> AsyncFunction(name) { _: Any?, _: Any?, _: Any?, _: Any? -> throw MetalUnavailableException(name) }
       }
     }
 
-    // Texture Management
-    AsyncFunction("createTexture") { descriptor: Map<String, Any>, promise: Promise ->
-      try {
-        val width = descriptor["width"] as? Int ?: 0
-        val height = descriptor["height"] as? Int ?: 0
-        val pixelFormat = descriptor["pixelFormat"] as? String ?: "RGBA8Unorm"
-
-        val textureIds = IntArray(1)
-        GLES20.glGenTextures(1, textureIds, 0)
-        
-        if (textureIds[0] == 0) {
-          promise.reject("TEXTURE_CREATION_FAILED", "Failed to create texture")
-          return@AsyncFunction
-        }
-
-        val textureId = textureIds[0].toString()
-        textures[textureId] = textureIds[0]
-
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureIds[0])
-        GLES20.glTexImage2D(
-          GLES20.GL_TEXTURE_2D, 0, parsePixelFormat(pixelFormat),
-          width, height, 0, parsePixelFormat(pixelFormat), GLES20.GL_UNSIGNED_BYTE, null
-        )
-
-        promise.resolve(mapOf(
-          "id" to textureId,
-          "width" to width,
-          "height" to height,
-          "pixelFormat" to pixelFormat,
-          "mipmapLevelCount" to 1,
-          "sampleCount" to 1,
-          "arrayLength" to 1,
-          "depth" to 1
-        ))
-      } catch (e: Exception) {
-        promise.reject("TEXTURE_CREATION_ERROR", "Failed to create texture", e)
-      }
-    }
-
-    // Initialize OpenGL
-    OnCreate {
-      try {
-        val context = appContext.currentActivity?.applicationContext
-        if (context != null) {
-          val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-          val deviceInfo = activityManager.deviceConfigurationInfo
-          isOpenGLAvailable = deviceInfo.reqGlEsVersion >= 0x20000
-          
-          if (isOpenGLAvailable) {
-            val intArray = IntArray(1)
-            GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, intArray, 0)
-            maxTextureSize = intArray[0]
-            
-            GLES20.glGetIntegerv(GLES20.GL_MAX_VERTEX_ATTRIBS, intArray, 0)
-            maxVertexAttribs = intArray[0]
-            
-            GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_IMAGE_UNITS, intArray, 0)
-            maxTextureImageUnits = intArray[0]
-          }
-        }
-      } catch (e: Exception) {
-        isOpenGLAvailable = false
-      }
+    View(MunimMetalkitView::class) {
+      Events("onLoad", "onRender", "onError")
     }
   }
 
-  private fun parsePixelFormat(format: String): Int {
-    return when (format) {
-      "RGBA8Unorm", "RGBA8Unorm_sRGB" -> GLES20.GL_RGBA
-      "BGRA8Unorm", "BGRA8Unorm_sRGB" -> GLES20.GL_RGBA
-      "RGB10A2Unorm" -> GLES20.GL_RGBA
-      "RG11B10Float" -> GLES20.GL_RGB
-      "RGB9E5Float" -> GLES20.GL_RGB
-      "RGBA16Float" -> GLES30.GL_RGBA16F
-      "RGBA32Float" -> GLES30.GL_RGBA32F
-      "Depth32Float" -> GLES20.GL_DEPTH_COMPONENT
-      "Depth24Unorm_Stencil8" -> GLES20.GL_DEPTH_STENCIL
-      "Depth32Float_Stencil8" -> GLES20.GL_DEPTH_STENCIL
-      else -> GLES20.GL_RGBA
-    }
+  companion object {
+    /** Keep in sync with src/MunimMetalkitModule.ts. */
+    private val ASYNC_METHODS = listOf(
+      "getDeviceInfo" to 0,
+      "createTexture" to 1,
+      "loadTextureFromURL" to 2,
+      "loadTextureFromData" to 2,
+      "updateTexture" to 4,
+      "readTexture" to 3,
+      "generateMipmaps" to 1,
+      "releaseTexture" to 1,
+      "createBuffer" to 1,
+      "createBufferWithData" to 2,
+      "updateBuffer" to 3,
+      "getBufferContents" to 1,
+      "releaseBuffer" to 1,
+      "createShaderLibrary" to 1,
+      "getShaderLibraryFunctionNames" to 1,
+      "releaseShaderLibrary" to 1,
+      "createComputePipelineState" to 2,
+      "releaseComputePipelineState" to 1,
+      "dispatchCompute" to 4,
+      "createRenderPipelineState" to 1,
+      "releaseRenderPipelineState" to 1,
+      "startRendering" to 0,
+      "stopRendering" to 0,
+      "pauseRendering" to 0,
+      "resumeRendering" to 0,
+      "setNeedsDisplay" to 0,
+      "setPreferredFramesPerSecond" to 1,
+      "setClearColor" to 4,
+      "setDrawableSize" to 2,
+      "takeScreenshot" to 1,
+      "getPerformanceInfo" to 0,
+      "createMesh" to 1,
+      "loadMeshFromURL" to 1,
+      "loadMeshFromData" to 2,
+      "updateMesh" to 2,
+      "releaseMesh" to 1,
+      "createAnimation" to 1,
+      "startAnimation" to 1,
+      "pauseAnimation" to 1,
+      "stopAnimation" to 1,
+      "setAnimationTime" to 2,
+      "releaseAnimation" to 1,
+      "setScene" to 1,
+      "updateCamera" to 1,
+      "updateLighting" to 1,
+      "createCanvas2D" to 3,
+      "clearCanvas2D" to 2,
+      "drawLine2D" to 4,
+      "drawRectangle2D" to 3,
+      "drawCircle2D" to 3,
+      "drawEllipse2D" to 3,
+      "drawPath2D" to 3,
+      "drawText2D" to 4,
+      "measureText2D" to 2,
+      "drawImage2D" to 4,
+      "compositeCanvas2D" to 3,
+      "saveCanvas2D" to 1,
+      "restoreCanvas2D" to 1,
+      "translateCanvas2D" to 3,
+      "rotateCanvas2D" to 2,
+      "scaleCanvas2D" to 3,
+      "setTransformCanvas2D" to 2,
+      "createDrawingLayer" to 2,
+      "deleteDrawingLayer" to 2,
+      "setActiveLayer" to 2,
+      "setLayerOpacity" to 3,
+      "setLayerBlendMode" to 3,
+      "toggleLayerVisibility" to 2,
+      "setBrushStyle" to 2,
+      "setLineStyle" to 2,
+      "setFillStyle" to 2,
+      "setTextStyle" to 2,
+      "resizeCanvas2D" to 3,
+      "cropCanvas2D" to 2,
+      "flipCanvas2D" to 3,
+      "exportCanvas2D" to 2,
+      "importImageToCanvas2D" to 3,
+      "getCanvas2DPixel" to 3,
+      "setCanvas2DPixel" to 4,
+      "getCanvas2DData" to 1,
+      "setCanvas2DData" to 2,
+    )
   }
 }
 
-data class MeshData(
-  val vertexCount: Int,
-  val primitiveType: String
-)
-
-data class AnimationData(
-  val duration: Double,
-  val repeatCount: Float,
-  val autoreverses: Boolean,
-  val timingFunction: String,
-  var isRunning: Boolean = false,
-  var currentTime: Double = 0.0
-)
+class MetalUnavailableException(method: String) :
+  CodedException(
+    "ERR_METAL_UNAVAILABLE",
+    "munim-metalkit: $method() is unavailable on Android. Metal is only available on iOS.",
+    null
+  )
