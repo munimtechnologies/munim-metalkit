@@ -21,17 +21,22 @@ class MunimMetalkitModule : Module() {
     // instead of failing on an argument-count mismatch.
     for ((name, arity) in ASYNC_METHODS) {
       when (arity) {
-        0 -> AsyncFunction(name) { -> throw MetalUnavailableException(name) }
-        1 -> AsyncFunction(name) { _: Any? -> throw MetalUnavailableException(name) }
-        2 -> AsyncFunction(name) { _: Any?, _: Any? -> throw MetalUnavailableException(name) }
-        3 -> AsyncFunction(name) { _: Any?, _: Any?, _: Any? -> throw MetalUnavailableException(name) }
-        else -> AsyncFunction(name) { _: Any?, _: Any?, _: Any?, _: Any? -> throw MetalUnavailableException(name) }
+        0 -> AsyncFunction(name) { -> unavailable(name) }
+        1 -> AsyncFunction(name) { _: Any? -> unavailable(name) }
+        2 -> AsyncFunction(name) { _: Any?, _: Any? -> unavailable(name) }
+        3 -> AsyncFunction(name) { _: Any?, _: Any?, _: Any? -> unavailable(name) }
+        else -> AsyncFunction(name) { _: Any?, _: Any?, _: Any?, _: Any? -> unavailable(name) }
       }
     }
 
     View(MunimMetalkitView::class) {
       Events("onLoad", "onRender", "onError")
     }
+  }
+
+  // Declared as returning Unit so the DSL's reified return type is not inferred as Nothing.
+  private fun unavailable(name: String) {
+    throw MetalUnavailableException(name)
   }
 
   companion object {
