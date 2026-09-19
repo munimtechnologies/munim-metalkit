@@ -1,281 +1,371 @@
 import { NativeModule, requireNativeModule } from "expo";
 
-import {
-  MunimMetalkitModuleEvents,
-  TextureDescriptor,
-  Texture,
-  BufferDescriptor,
-  Buffer,
-  ShaderDescriptor,
-  RenderPipelineState,
-  MeshDescriptor,
-  Mesh,
-  AnimationDescriptor,
+import type {
   Animation,
-  SceneDescriptor,
-  CameraDescriptor,
-  LightingDescriptor,
-  MTLPixelFormat,
-  Canvas2D,
-  Color2D,
-  Point2D,
-  LineStyle,
-  Rectangle2D,
-  FillStyle,
-  Circle2D,
-  Ellipse2D,
-  Path2D,
-  TextStyle,
-  DrawingLayer,
+  AnimationDescriptor,
+  BinaryData,
   BrushStyle,
+  Buffer,
+  BufferDescriptor,
+  CameraDescriptor,
+  Canvas2D,
+  Circle2D,
+  Color2D,
+  ComputeDispatchResult,
+  ComputePipelineState,
+  DeviceInfo,
+  DispatchComputeOptions,
+  DrawingLayer,
+  Ellipse2D,
+  FillStyle,
+  LightingDescriptor,
+  LineStyle,
+  MTLPixelFormat,
+  Mesh,
+  MeshDescriptor,
+  MunimMetalkitModuleEvents,
+  Path2D,
+  PerformanceInfo,
+  Point2D,
+  Rectangle2D,
+  RenderPipelineState,
+  SceneDescriptor,
+  Screenshot,
+  ScreenshotOptions,
+  ShaderDescriptor,
+  TextStyle,
+  Texture,
+  TextureDescriptor,
+  TextureLoadOptions,
+  TextureRegion,
+  TextureTransferOptions,
+  ThreadSize,
 } from "./MunimMetalkit.types";
 
-declare class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
-  // Constants
+/** Marker used in JSDoc: the method rejects with `ERR_NOT_IMPLEMENTED` on every platform. */
+type NotImplemented<T> = Promise<T>;
+
+export declare class MunimMetalkitModule extends NativeModule<MunimMetalkitModuleEvents> {
   PI: number;
 
-  // Basic functions
-  hello(): string;
-  setValueAsync(value: string): Promise<void>;
+  // Device
 
-  // Device and Context
+  /** True on iOS devices/simulators with a Metal GPU. Always false on Android and web. */
   isMetalAvailable(): boolean;
-  getDeviceInfo(): Promise<{
-    name: string;
-    maxThreadsPerGroup: number;
-    maxThreadgroupMemoryLength: number;
-  }>;
+  getDeviceInfo(): Promise<DeviceInfo>;
 
-  // Texture Management
+  // Textures
+
   createTexture(descriptor: TextureDescriptor): Promise<Texture>;
-  loadTextureFromURL(url: string): Promise<Texture>;
-  loadTextureFromData(
-    data: ArrayBuffer,
-    descriptor: TextureDescriptor
+  /** Loads an image from a `file://` or `http(s)://` URL. */
+  loadTextureFromURL(
+    url: string,
+    options?: TextureLoadOptions,
   ): Promise<Texture>;
+  /** Decodes encoded image bytes (PNG, JPEG, ...). */
+  loadTextureFromData(
+    data: BinaryData,
+    options?: TextureLoadOptions,
+  ): Promise<Texture>;
+  /** Uploads tightly packed texels (or `options.bytesPerRow`-strided rows) into a region. */
   updateTexture(
     textureId: string,
-    data: ArrayBuffer,
-    region: { x: number; y: number; width: number; height: number }
+    data: BinaryData,
+    region?: TextureRegion,
+    options?: TextureTransferOptions,
   ): Promise<void>;
+  /** Reads texels back. Works for Shared and Private textures. */
+  readTexture(
+    textureId: string,
+    region?: TextureRegion,
+    options?: TextureTransferOptions,
+  ): Promise<ArrayBuffer>;
   generateMipmaps(textureId: string): Promise<void>;
   releaseTexture(textureId: string): Promise<void>;
 
-  // Buffer Management
+  // Buffers
+
   createBuffer(descriptor: BufferDescriptor): Promise<Buffer>;
-  createBufferWithData(data: ArrayBuffer, options?: string): Promise<Buffer>;
+  /** `data` must not be empty. */
+  createBufferWithData(
+    data: BinaryData,
+    options?: BufferDescriptor["options"],
+  ): Promise<Buffer>;
   updateBuffer(
     bufferId: string,
-    data: ArrayBuffer,
-    offset?: number
+    data: BinaryData,
+    offset?: number,
   ): Promise<void>;
   getBufferContents(bufferId: string): Promise<ArrayBuffer>;
   releaseBuffer(bufferId: string): Promise<void>;
 
-  // Shader Management
+  // Shaders and pipelines
+
+  /**
+   * Compiles Metal Shading Language source and returns a library id. Compiler errors reject with
+   * `ERR_SHADER_COMPILATION` and include the compiler log.
+   */
   createShaderLibrary(source: string): Promise<string>;
+  getShaderLibraryFunctionNames(libraryId: string): Promise<string[]>;
+  releaseShaderLibrary(libraryId: string): Promise<void>;
+  /** Builds a compute pipeline from a `kernel` function in a library. */
+  createComputePipelineState(
+    libraryId: string,
+    functionName: string,
+  ): Promise<ComputePipelineState>;
+  releaseComputePipelineState(pipelineId: string): Promise<void>;
+  /**
+   * Encodes one compute dispatch, waits for it to finish, and reports its GPU time.
+   * `buffers[i]` is bound at `[[buffer(i)]]`.
+   */
+  dispatchCompute(
+    pipelineId: string,
+    buffers: string[],
+    threadgroups: ThreadSize,
+    options?: DispatchComputeOptions,
+  ): Promise<ComputeDispatchResult>;
+  /**
+   * Builds (and validates) a render pipeline from vertex + fragment functions. There is no JS draw
+   * API yet, so the pipeline cannot be used for drawing from JavaScript.
+   */
   createRenderPipelineState(
-    descriptor: ShaderDescriptor
+    descriptor: ShaderDescriptor,
   ): Promise<RenderPipelineState>;
-  createComputePipelineState(computeFunction: string): Promise<string>;
   releaseRenderPipelineState(pipelineId: string): Promise<void>;
 
-  // Mesh Management
-  createMesh(descriptor: MeshDescriptor): Promise<Mesh>;
-  loadMeshFromURL(url: string): Promise<Mesh>;
-  loadMeshFromData(
-    data: ArrayBuffer,
-    format: "obj" | "ply" | "stl"
-  ): Promise<Mesh>;
-  updateMesh(
-    meshId: string,
-    descriptor: Partial<MeshDescriptor>
-  ): Promise<void>;
-  releaseMesh(meshId: string): Promise<void>;
+  // View control: applies to every mounted MunimMetalkitView
 
-  // Animation Management
-  createAnimation(descriptor: AnimationDescriptor): Promise<Animation>;
-  startAnimation(animationId: string): Promise<void>;
-  pauseAnimation(animationId: string): Promise<void>;
-  stopAnimation(animationId: string): Promise<void>;
-  setAnimationTime(animationId: string, time: number): Promise<void>;
-  releaseAnimation(animationId: string): Promise<void>;
-
-  // Scene Management
-  setScene(scene: SceneDescriptor): Promise<void>;
-  updateCamera(camera: CameraDescriptor): Promise<void>;
-  updateLighting(lighting: LightingDescriptor): Promise<void>;
-
-  // Rendering Control
   startRendering(): Promise<void>;
   stopRendering(): Promise<void>;
   pauseRendering(): Promise<void>;
   resumeRendering(): Promise<void>;
+  /** Renders one frame on every mounted view. */
   setNeedsDisplay(): Promise<void>;
-
-  // View Configuration
   setPreferredFramesPerSecond(fps: number): Promise<void>;
   setClearColor(
     red: number,
     green: number,
     blue: number,
-    alpha: number
+    alpha: number,
   ): Promise<void>;
   setDrawableSize(width: number, height: number): Promise<void>;
 
-  // Utility Functions
-  takeScreenshot(): Promise<ArrayBuffer>;
-  getPerformanceInfo(): Promise<{
-    frameTime: number;
-    drawCallCount: number;
-    triangleCount: number;
-  }>;
+  // Utilities
 
-  // 2D Drawing Functions
+  /**
+   * Captures the most recently mounted MunimMetalkitView as a PNG. Prefer the view ref's
+   * `takeScreenshot()` when more than one view is mounted.
+   */
+  takeScreenshot(options?: ScreenshotOptions): Promise<Screenshot>;
+  getPerformanceInfo(): Promise<PerformanceInfo>;
+
+  // Mesh management: not implemented
+
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  createMesh(descriptor: MeshDescriptor): NotImplemented<Mesh>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  loadMeshFromURL(url: string): NotImplemented<Mesh>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  loadMeshFromData(
+    data: BinaryData,
+    format: "obj" | "ply" | "stl",
+  ): NotImplemented<Mesh>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  updateMesh(
+    meshId: string,
+    descriptor: Partial<MeshDescriptor>,
+  ): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  releaseMesh(meshId: string): NotImplemented<void>;
+
+  // Animation management: not implemented
+
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  createAnimation(descriptor: AnimationDescriptor): NotImplemented<Animation>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  startAnimation(animationId: string): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  pauseAnimation(animationId: string): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  stopAnimation(animationId: string): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setAnimationTime(animationId: string, time: number): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  releaseAnimation(animationId: string): NotImplemented<void>;
+
+  // Scene management: not implemented
+
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setScene(scene: SceneDescriptor): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  updateCamera(camera: CameraDescriptor): NotImplemented<void>;
+  /** @experimental Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  updateLighting(lighting: LightingDescriptor): NotImplemented<void>;
+
+  // 2D canvas API: declared since 1.x but never had native code. Every call rejects.
+
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   createCanvas2D(
     width: number,
     height: number,
-    pixelFormat?: MTLPixelFormat
-  ): Promise<Canvas2D>;
-  clearCanvas2D(canvasId: string, backgroundColor?: Color2D): Promise<void>;
-
-  // 2D Primitive Drawing
+    pixelFormat?: MTLPixelFormat,
+  ): NotImplemented<Canvas2D>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  clearCanvas2D(
+    canvasId: string,
+    backgroundColor?: Color2D,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   drawLine2D(
     canvasId: string,
     start: Point2D,
     end: Point2D,
-    style: LineStyle
-  ): Promise<void>;
+    style: LineStyle,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   drawRectangle2D(
     canvasId: string,
     rect: Rectangle2D,
-    style: FillStyle | LineStyle
-  ): Promise<void>;
+    style: FillStyle | LineStyle,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   drawCircle2D(
     canvasId: string,
     circle: Circle2D,
-    style: FillStyle | LineStyle
-  ): Promise<void>;
+    style: FillStyle | LineStyle,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   drawEllipse2D(
     canvasId: string,
     ellipse: Ellipse2D,
-    style: FillStyle | LineStyle
-  ): Promise<void>;
-  drawPath2D(canvasId: string, path: Path2D, style: LineStyle): Promise<void>;
-
-  // 2D Text Rendering
+    style: FillStyle | LineStyle,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  drawPath2D(
+    canvasId: string,
+    path: Path2D,
+    style: LineStyle,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   drawText2D(
     canvasId: string,
     text: string,
     position: Point2D,
-    style: TextStyle
-  ): Promise<void>;
+    style: TextStyle,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   measureText2D(
     text: string,
-    style: TextStyle
-  ): Promise<{ width: number; height: number }>;
-
-  // 2D Image Operations
+    style: TextStyle,
+  ): NotImplemented<{ width: number; height: number }>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   drawImage2D(
     canvasId: string,
     imageTextureId: string,
     destination: Rectangle2D,
-    source?: Rectangle2D
-  ): Promise<void>;
+    source?: Rectangle2D,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   compositeCanvas2D(
     canvasId: string,
     sourceCanvasId: string,
-    operation:
-      | "source-over"
-      | "source-in"
-      | "source-out"
-      | "source-atop"
-      | "destination-over"
-      | "destination-in"
-      | "destination-out"
-      | "destination-atop"
-      | "xor"
-      | "lighter"
-      | "copy"
-      | "multiply"
-      | "screen"
-      | "overlay"
-      | "darken"
-      | "lighten"
-      | "color-dodge"
-      | "color-burn"
-      | "hard-light"
-      | "soft-light"
-      | "difference"
-      | "exclusion"
-  ): Promise<void>;
-
-  // 2D Transformations
-  saveCanvas2D(canvasId: string): Promise<void>;
-  restoreCanvas2D(canvasId: string): Promise<void>;
-  translateCanvas2D(canvasId: string, x: number, y: number): Promise<void>;
-  rotateCanvas2D(canvasId: string, angle: number): Promise<void>;
-  scaleCanvas2D(canvasId: string, x: number, y: number): Promise<void>;
-  setTransformCanvas2D(canvasId: string, matrix: number[]): Promise<void>;
-
-  // 2D Layer Management
-  createDrawingLayer(canvasId: string, name: string): Promise<DrawingLayer>;
-  deleteDrawingLayer(canvasId: string, layerId: string): Promise<void>;
-  setActiveLayer(canvasId: string, layerId: string): Promise<void>;
+    operation: string,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  saveCanvas2D(canvasId: string): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  restoreCanvas2D(canvasId: string): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  translateCanvas2D(
+    canvasId: string,
+    x: number,
+    y: number,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  rotateCanvas2D(canvasId: string, angle: number): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  scaleCanvas2D(canvasId: string, x: number, y: number): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setTransformCanvas2D(
+    canvasId: string,
+    matrix: number[],
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  createDrawingLayer(
+    canvasId: string,
+    name: string,
+  ): NotImplemented<DrawingLayer>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  deleteDrawingLayer(canvasId: string, layerId: string): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setActiveLayer(canvasId: string, layerId: string): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   setLayerOpacity(
     canvasId: string,
     layerId: string,
-    opacity: number
-  ): Promise<void>;
+    opacity: number,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   setLayerBlendMode(
     canvasId: string,
     layerId: string,
-    blendMode: string
-  ): Promise<void>;
-  toggleLayerVisibility(canvasId: string, layerId: string): Promise<void>;
-
-  // 2D Brush and Tool Management
-  setBrushStyle(canvasId: string, style: BrushStyle): Promise<void>;
-  setLineStyle(canvasId: string, style: LineStyle): Promise<void>;
-  setFillStyle(canvasId: string, style: FillStyle): Promise<void>;
-  setTextStyle(canvasId: string, style: TextStyle): Promise<void>;
-
-  // 2D Canvas Operations
+    blendMode: string,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  toggleLayerVisibility(
+    canvasId: string,
+    layerId: string,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setBrushStyle(canvasId: string, style: BrushStyle): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setLineStyle(canvasId: string, style: LineStyle): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setFillStyle(canvasId: string, style: FillStyle): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setTextStyle(canvasId: string, style: TextStyle): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   resizeCanvas2D(
     canvasId: string,
     width: number,
-    height: number
-  ): Promise<void>;
-  cropCanvas2D(canvasId: string, rect: Rectangle2D): Promise<void>;
+    height: number,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  cropCanvas2D(canvasId: string, rect: Rectangle2D): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   flipCanvas2D(
     canvasId: string,
     horizontal: boolean,
-    vertical: boolean
-  ): Promise<void>;
-  rotateCanvas2D(canvasId: string, angle: number): Promise<void>;
-
-  // 2D Export and Import
+    vertical: boolean,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   exportCanvas2D(
     canvasId: string,
-    format: "png" | "jpg" | "webp"
-  ): Promise<ArrayBuffer>;
+    format: "png" | "jpg" | "webp",
+  ): NotImplemented<ArrayBuffer>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   importImageToCanvas2D(
     canvasId: string,
-    imageData: ArrayBuffer,
-    position: Point2D
-  ): Promise<void>;
-
-  // 2D Utility Functions
-  getCanvas2DPixel(canvasId: string, x: number, y: number): Promise<Color2D>;
+    imageData: BinaryData,
+    position: Point2D,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  getCanvas2DPixel(
+    canvasId: string,
+    x: number,
+    y: number,
+  ): NotImplemented<Color2D>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
   setCanvas2DPixel(
     canvasId: string,
     x: number,
     y: number,
-    color: Color2D
-  ): Promise<void>;
-  getCanvas2DData(canvasId: string): Promise<ArrayBuffer>;
-  setCanvas2DData(canvasId: string, data: ArrayBuffer): Promise<void>;
+    color: Color2D,
+  ): NotImplemented<void>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  getCanvas2DData(canvasId: string): NotImplemented<ArrayBuffer>;
+  /** @deprecated Not implemented: rejects with `ERR_NOT_IMPLEMENTED`. */
+  setCanvas2DData(canvasId: string, data: BinaryData): NotImplemented<void>;
 }
 
-// This call loads the native module object from the JSI.
 export default requireNativeModule<MunimMetalkitModule>("MunimMetalkit");
