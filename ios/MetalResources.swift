@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import Foundation
 import Metal
+import QuartzCore
 
 // MARK: - Shared device
 

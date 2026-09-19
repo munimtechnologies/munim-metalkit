@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import Metal
+import QuartzCore
 import MetalKit
 
 // `@unchecked Sendable`: every stored property is an immutable reference to a lock-protected
