@@ -232,7 +232,7 @@ public final class MunimMetalkitView: ExpoView {
 
 // MARK: - MTKViewDelegate
 
-extension MunimMetalkitView: @preconcurrency MTKViewDelegate {
+extension MunimMetalkitView: MTKViewDelegate {
   public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
   public func draw(in view: MTKView) {
@@ -352,24 +352,26 @@ extension MunimMetalkitView: @preconcurrency MTKViewDelegate {
         return
       }
       for request in requests {
-        var payload: [String: Any] = ["width": width, "height": height]
         if request.result == "file" {
           let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("munim-metalkit-\(UUID().uuidString).png")
           do {
             try png.write(to: url)
-            payload["uri"] = url.absoluteString
+            request.promise.resolve(screenshotPayload(width: width, height: height, key: "uri", value: url.absoluteString))
           } catch {
             request.promise.reject(MetalKitError.gpu("Failed to write screenshot: \(error.localizedDescription)"))
-            continue
           }
         } else {
-          payload["base64"] = png.base64EncodedString()
+          request.promise.resolve(
+            screenshotPayload(width: width, height: height, key: "base64", value: png.base64EncodedString()))
         }
-        request.promise.resolve(payload)
       }
     }
   }
+}
+
+private func screenshotPayload(width: Int, height: Int, key: String, value: String) -> [String: Any] {
+  return ["width": width, "height": height, key: value]
 }
 
 private func encodePNG(_ pixels: Data, width: Int, height: Int, bytesPerRow: Int, bitmapInfo: UInt32) -> Data? {
