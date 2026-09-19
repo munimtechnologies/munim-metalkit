@@ -1,4 +1,5 @@
 import MunimMetalkit, { MunimMetalkitView, type MunimMetalkitViewRef } from "munim-metalkit";
+import { File, Paths } from "expo-file-system";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Image, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -32,6 +33,16 @@ export default function App() {
       const result = await runSelfTest(getView, setArtifacts);
       setReport(result);
       console.log(`MUNIM_METALKIT_SELFTEST ${JSON.stringify(result)}`);
+      // Also written to Documents so device runs can be read back without
+      // Metro (e.g. `devicectl device copy from --domain-type appDataContainer`).
+      try {
+        const file = new File(Paths.document, "munim-metalkit-selftest.json");
+        if (file.exists) file.delete();
+        file.create();
+        file.write(JSON.stringify(result));
+      } catch (error) {
+        console.warn("could not write the self-test result file", error);
+      }
     } finally {
       setRunning(false);
     }
