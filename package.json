@@ -48,5 +48,8 @@
     "expo": "*",
     "react": "*",
     "react-native": "*"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }
