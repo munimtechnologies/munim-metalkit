@@ -1,358 +1,394 @@
 import ExpoModulesCore
+import ImageIO
 import Metal
 import MetalKit
-import SceneKit
 import UIKit
-import simd
+import UniformTypeIdentifiers
 
-public class MunimMetalkitView: ExpoView {
-  private var metalView: MTKView?
-  private var device: MTLDevice?
-  private var commandQueue: MTLCommandQueue?
-  private var renderPipelineState: MTLRenderPipelineState?
-  private var depthStencilState: MTLDepthStencilState?
-  private var scene: SCNScene?
-  private var renderer: SCNRenderer?
-  
-  // Rendering properties
-  public var preferredFramesPerSecond: Int = 60
-  public var enableSetNeedsDisplay: Bool = true
-  public var autoResizeDrawable: Bool = true
-  public var drawableSize: CGSize = .zero
-  public var colorPixelFormat: MTLPixelFormat = .bgra8Unorm
-  public var depthStencilPixelFormat: MTLPixelFormat = .depth32Float
-  public var sampleCount: Int = 1
-  public var clearColor: MTLClearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
-  
-  // Scene properties
-  private var sceneDescriptor: [String: Any]?
-  private var cameraDescriptor: [String: Any]?
-  private var lightingDescriptor: [String: Any]?
-  
-  // Performance tracking
-  private var frameStartTime: CFTimeInterval = 0
-  private var frameCount: Int = 0
-  private var drawCallCount: Int = 0
-  private var triangleCount: Int = 0
-  
-  required init(appContext: AppContext? = nil) {
-    super.init(appContext: appContext)
-    setupMetalView()
-  }
-  
-  private func setupMetalView() {
-    guard let device = MTLCreateSystemDefaultDevice() else {
-      print("Metal is not supported on this device")
-      return
+/// Keeps weak references to mounted views so module-level functions
+/// (`takeScreenshot`, `pauseRendering`, ...) can reach them.
+@MainActor
+enum MetalViewRegistry {
+  private final class WeakView {
+    weak var view: MunimMetalkitView?
+    init(_ view: MunimMetalkitView) {
+      self.view = view
     }
-    
-    self.device = device
-    
-    let metalView = MTKView(frame: bounds, device: device)
-    metalView.delegate = self
+  }
+
+  private static var entries: [WeakView] = []
+
+  static func register(_ view: MunimMetalkitView) {
+    entries.removeAll { $0.view == nil || $0.view === view }
+    entries.append(WeakView(view))
+  }
+
+  static var views: [MunimMetalkitView] {
+    entries.removeAll { $0.view == nil }
+    return entries.compactMap(\.view)
+  }
+
+  /// The most recently mounted view that is currently in a window (falls back to any live view).
+  static var mostRecent: MunimMetalkitView? {
+    let live = views
+    return live.last(where: { $0.window != nil }) ?? live.last
+  }
+}
+
+/// An `MTKView` host that renders the bundled default shader (a rotating RGB triangle).
+/// The shader is compiled from source at runtime (see `DefaultShaders.swift`), so the view does
+/// not depend on a `.metallib` being present in the app bundle.
+public final class MunimMetalkitView: ExpoView {
+  let metalView: MTKView
+  let onLoad = EventDispatcher()
+  let onRender = EventDispatcher()
+  let onError = EventDispatcher()
+
+  private let context = MetalContext.shared
+  private var pipelineState: MTLRenderPipelineState?
+  private var pipelineKey: String?
+  private var failedPipelineKey: String?
+  private var depthStencilState: MTLDepthStencilState?
+  private let startTime = CACurrentMediaTime()
+  private var didEmitLoad = false
+  private var lastRenderEventTime: CFTimeInterval = 0
+  private var pendingCaptures: [(result: String, promise: Promise)] = []
+
+  // MARK: - Props (applied straight to the MTKView)
+
+  var preferredFramesPerSecond: Int = 60 {
+    didSet { metalView.preferredFramesPerSecond = preferredFramesPerSecond }
+  }
+
+  var enableSetNeedsDisplay: Bool = false {
+    didSet { metalView.enableSetNeedsDisplay = enableSetNeedsDisplay }
+  }
+
+  var paused: Bool = false {
+    didSet { metalView.isPaused = paused }
+  }
+
+  var autoResizeDrawable: Bool = true {
+    didSet { applyDrawableSize() }
+  }
+
+  var fixedDrawableSize: CGSize? {
+    didSet { applyDrawableSize() }
+  }
+
+  var clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1) {
+    didSet { metalView.clearColor = clearColor }
+  }
+
+  required init(appContext: AppContext? = nil) {
+    metalView = MTKView(frame: .zero, device: MetalContext.shared.device)
+    super.init(appContext: appContext)
+
+    clipsToBounds = true
+    metalView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    metalView.colorPixelFormat = .bgra8Unorm
+    metalView.depthStencilPixelFormat = .depth32Float
+    metalView.sampleCount = 1
+    metalView.clearColor = clearColor
     metalView.preferredFramesPerSecond = preferredFramesPerSecond
     metalView.enableSetNeedsDisplay = enableSetNeedsDisplay
-    metalView.autoResizeDrawable = autoResizeDrawable
-    metalView.colorPixelFormat = colorPixelFormat
-    metalView.depthStencilPixelFormat = depthStencilPixelFormat
-    metalView.sampleCount = sampleCount
-    metalView.clearColor = clearColor
+    metalView.isPaused = paused
+    // Needed so the drawable texture can be blitted out for screenshots.
     metalView.framebufferOnly = false
-    
-    self.metalView = metalView
+    metalView.delegate = self
     addSubview(metalView)
-    
-    setupMetal()
-    setupSceneKit()
-  }
-  
-  private func setupMetal() {
-    guard let device = device else { return }
-    
-    commandQueue = device.makeCommandQueue()
-    
-    // Create render pipeline state
-    let library = device.makeDefaultLibrary()
-    let vertexFunction = library?.makeFunction(name: "vertex_main")
-    let fragmentFunction = library?.makeFunction(name: "fragment_main")
-    
-    let pipelineDescriptor = MTLRenderPipelineDescriptor()
-    pipelineDescriptor.vertexFunction = vertexFunction
-    pipelineDescriptor.fragmentFunction = fragmentFunction
-    pipelineDescriptor.colorAttachments[0].pixelFormat = colorPixelFormat
-    pipelineDescriptor.depthAttachmentPixelFormat = depthStencilPixelFormat
-    pipelineDescriptor.sampleCount = sampleCount
-    
-    do {
-      renderPipelineState = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
-    } catch {
-      print("Failed to create render pipeline state: \(error)")
+
+    if let device = context.device {
+      let depthDescriptor = MTLDepthStencilDescriptor()
+      depthDescriptor.depthCompareFunction = .always
+      depthDescriptor.isDepthWriteEnabled = false
+      depthStencilState = device.makeDepthStencilState(descriptor: depthDescriptor)
     }
-    
-    // Create depth stencil state
-    let depthStencilDescriptor = MTLDepthStencilDescriptor()
-    depthStencilDescriptor.depthCompareFunction = .less
-    depthStencilDescriptor.isDepthWriteEnabled = true
-    depthStencilState = device.makeDepthStencilState(descriptor: depthStencilDescriptor)
+
+    MetalViewRegistry.register(self)
   }
-  
-  private func setupSceneKit() {
-    guard let device = device else { return }
-    
-    scene = SCNScene()
-    renderer = SCNRenderer(device: device, options: nil)
-    renderer?.scene = scene
-  }
-  
+
   public override func layoutSubviews() {
     super.layoutSubviews()
-    metalView?.frame = bounds
-    
-    if autoResizeDrawable && !drawableSize.equalTo(.zero) {
-      metalView?.drawableSize = drawableSize
+    metalView.frame = bounds
+  }
+
+  // MARK: - Prop setters that can fail
+
+  func setColorPixelFormat(_ name: String) {
+    do {
+      let format = try MetalParsing.pixelFormat(name)
+      guard MetalParsing.bytesPerPixel(format) != nil, !MetalParsing.isDepth(format), format != .r32Float else {
+        throw MetalKitError.invalidArgument("colorPixelFormat '\(name)' cannot be used for the view's drawable.")
+      }
+      metalView.colorPixelFormat = format
+    } catch {
+      emitError(error)
     }
   }
-  
-  // MARK: - Property Setters
-  
-  func setPreferredFramesPerSecond(_ fps: Int) {
-    preferredFramesPerSecond = fps
-    metalView?.preferredFramesPerSecond = fps
+
+  func setDepthStencilPixelFormat(_ name: String) {
+    do {
+      let format = try MetalParsing.pixelFormat(name)
+      guard format == .invalid || MetalParsing.isDepth(format) else {
+        throw MetalKitError.invalidArgument("depthStencilPixelFormat '\(name)' is not a depth format.")
+      }
+      metalView.depthStencilPixelFormat = format
+    } catch {
+      emitError(error)
+    }
   }
-  
-  func setEnableSetNeedsDisplay(_ enabled: Bool) {
-    enableSetNeedsDisplay = enabled
-    metalView?.enableSetNeedsDisplay = enabled
-  }
-  
-  func setAutoResizeDrawable(_ autoResize: Bool) {
-    autoResizeDrawable = autoResize
-    metalView?.autoResizeDrawable = autoResize
-  }
-  
-  func setDrawableSize(_ size: CGSize) {
-    drawableSize = size
-    metalView?.drawableSize = size
-  }
-  
-  func setColorPixelFormat(_ format: MTLPixelFormat) {
-    colorPixelFormat = format
-    metalView?.colorPixelFormat = format
-  }
-  
-  func setDepthStencilPixelFormat(_ format: MTLPixelFormat) {
-    depthStencilPixelFormat = format
-    metalView?.depthStencilPixelFormat = format
-  }
-  
+
   func setSampleCount(_ count: Int) {
-    sampleCount = count
-    metalView?.sampleCount = count
+    guard let device = context.device else { return }
+    if count >= 1 && device.supportsTextureSampleCount(count) {
+      metalView.sampleCount = count
+    } else {
+      emitError(MetalKitError.unsupported("sampleCount \(count) is not supported by \(device.name)."))
+    }
   }
-  
-  func setClearColor(_ color: MTLClearColor) {
-    clearColor = color
-    metalView?.clearColor = color
+
+  private func applyDrawableSize() {
+    if let size = fixedDrawableSize, size.width > 0, size.height > 0 {
+      metalView.autoResizeDrawable = false
+      metalView.drawableSize = size
+    } else {
+      metalView.autoResizeDrawable = autoResizeDrawable
+    }
   }
-  
-  func setScene(_ scene: [String: Any]) {
-    sceneDescriptor = scene
-    // Process scene data and update SceneKit scene
-    processSceneData(scene)
+
+  // MARK: - Rendering control
+
+  /// Renders one frame synchronously (works while paused).
+  func renderFrame() {
+    metalView.draw()
   }
-  
-  func setCamera(_ camera: [String: Any]) {
-    cameraDescriptor = camera
-    // Update camera based on descriptor
-    updateCamera(camera)
+
+  // MARK: - Screenshots
+
+  /// Renders a frame and reads the drawable back as a PNG. `result` is "base64" or "file".
+  func captureScreenshot(result: String, promise: Promise) {
+    guard context.device != nil else {
+      promise.reject(MetalKitError.deviceNotAvailable())
+      return
+    }
+    guard result == "base64" || result == "file" else {
+      promise.reject(MetalKitError.invalidArgument("Screenshot result must be 'base64' or 'file'."))
+      return
+    }
+    pendingCaptures.append((result: result, promise: promise))
+    metalView.draw()
   }
-  
-  func setLighting(_ lighting: [String: Any]) {
-    lightingDescriptor = lighting
-    // Update lighting based on descriptor
-    updateLighting(lighting)
+
+  private func failPendingCaptures(_ error: Exception) {
+    let captures = pendingCaptures
+    pendingCaptures.removeAll()
+    for capture in captures {
+      capture.promise.reject(error)
+    }
   }
-  
-  // MARK: - Scene Processing
-  
-  private func processSceneData(_ sceneData: [String: Any]) {
-    guard let scene = scene else { return }
-    
-    // Clear existing scene
-    scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
-    
-    // Process meshes
-    if let meshes = sceneData["meshes"] as? [[String: Any]] {
-      for meshData in meshes {
-        createMeshNode(from: meshData)
+
+  private func emitError(_ error: Error) {
+    let message = (error as? Exception)?.reason ?? error.localizedDescription
+    let code = (error as? Exception)?.code ?? "ERR_METAL"
+    onError(["error": message, "code": code])
+  }
+
+  // MARK: - Pipeline
+
+  private func ensurePipeline() -> MTLRenderPipelineState? {
+    guard let device = context.device else { return nil }
+    let key = "\(metalView.colorPixelFormat.rawValue)-\(metalView.depthStencilPixelFormat.rawValue)-\(metalView.sampleCount)"
+    if key == pipelineKey, let pipelineState {
+      return pipelineState
+    }
+    if key == failedPipelineKey {
+      return nil
+    }
+    do {
+      let library = try DefaultShaders.library(device: device)
+      let descriptor = MTLRenderPipelineDescriptor()
+      descriptor.label = "munim-metalkit default"
+      descriptor.vertexFunction = library.makeFunction(name: DefaultShaders.vertexFunction)
+      descriptor.fragmentFunction = library.makeFunction(name: DefaultShaders.fragmentFunction)
+      descriptor.colorAttachments[0].pixelFormat = metalView.colorPixelFormat
+      descriptor.depthAttachmentPixelFormat = metalView.depthStencilPixelFormat
+      if MetalParsing.hasStencil(metalView.depthStencilPixelFormat) {
+        descriptor.stencilAttachmentPixelFormat = metalView.depthStencilPixelFormat
       }
+      descriptor.rasterSampleCount = metalView.sampleCount
+      let state = try device.makeRenderPipelineState(descriptor: descriptor)
+      pipelineState = state
+      pipelineKey = key
+      failedPipelineKey = nil
+      return state
+    } catch {
+      failedPipelineKey = key
+      emitError(MetalKitError.gpu("Failed to build the default render pipeline: \(error.localizedDescription)"))
+      return nil
     }
-    
-    // Process materials
-    if let materials = sceneData["materials"] as? [[String: Any]] {
-      for materialData in materials {
-        createMaterial(from: materialData)
-      }
-    }
-    
-    // Process animations
-    if let animations = sceneData["animations"] as? [[String: Any]] {
-      for animationData in animations {
-        createAnimation(from: animationData)
-      }
-    }
-    
-    // Set ambient light
-    if let ambientColor = sceneData["ambientLightColor"] as? [String: Any] {
-      let light = SCNLight()
-      light.type = .ambient
-      light.color = UIColor(
-        red: ambientColor["red"] as? CGFloat ?? 0.2,
-        green: ambientColor["green"] as? CGFloat ?? 0.2,
-        blue: ambientColor["blue"] as? CGFloat ?? 0.2,
-        alpha: ambientColor["alpha"] as? CGFloat ?? 1.0
-      )
-      
-      let lightNode = SCNNode()
-      lightNode.light = light
-      scene.rootNode.addChildNode(lightNode)
-    }
-    
-    // Set directional light
-    if let directionalColor = sceneData["directionalLightColor"] as? [String: Any],
-       let direction = sceneData["directionalLightDirection"] as? [String: Any] {
-      let light = SCNLight()
-      light.type = .directional
-      light.color = UIColor(
-        red: directionalColor["red"] as? CGFloat ?? 1.0,
-        green: directionalColor["green"] as? CGFloat ?? 1.0,
-        blue: directionalColor["blue"] as? CGFloat ?? 1.0,
-        alpha: directionalColor["alpha"] as? CGFloat ?? 1.0
-      )
-      
-      let lightNode = SCNNode()
-      lightNode.light = light
-      lightNode.position = SCNVector3(
-        direction["x"] as? Float ?? 0,
-        direction["y"] as? Float ?? 1,
-        direction["z"] as? Float ?? 0
-      )
-      scene.rootNode.addChildNode(lightNode)
-    }
-  }
-  
-  private func createMeshNode(from meshData: [String: Any]) {
-    guard let scene = scene else { return }
-    
-    let geometry = SCNBox(width: 1, height: 1, length: 1, chamferRadius: 0)
-    let material = SCNMaterial()
-    material.diffuse.contents = UIColor.blue
-    geometry.materials = [material]
-    
-    let node = SCNNode(geometry: geometry)
-    scene.rootNode.addChildNode(node)
-  }
-  
-  private func createMaterial(from materialData: [String: Any]) {
-    // Material creation logic would go here
-  }
-  
-  private func createAnimation(from animationData: [String: Any]) {
-    // Animation creation logic would go here
-  }
-  
-  private func updateCamera(_ cameraData: [String: Any]) {
-    // Camera update logic would go here
-  }
-  
-  private func updateLighting(_ lightingData: [String: Any]) {
-    // Lighting update logic would go here
-  }
-  
-  // MARK: - Rendering Control
-  
-  func startRendering() {
-    metalView?.isPaused = false
-  }
-  
-  func stopRendering() {
-    metalView?.isPaused = true
-  }
-  
-  func pauseRendering() {
-    metalView?.isPaused = true
-  }
-  
-  func resumeRendering() {
-    metalView?.isPaused = false
-  }
-  
-  public override func setNeedsDisplay() {
-    super.setNeedsDisplay()
-    metalView?.setNeedsDisplay()
-  }
-  
-  // MARK: - Performance Monitoring
-  
-  private func updatePerformanceMetrics() {
-    frameCount += 1
-    
-    // Performance metrics are tracked but events are sent from the module
-    // The view focuses on rendering, not event dispatching
   }
 }
 
 // MARK: - MTKViewDelegate
 
-extension MunimMetalkitView: MTKViewDelegate {
-  public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-    // Handle drawable size change
-  }
-  
+extension MunimMetalkitView: @preconcurrency MTKViewDelegate {
+  public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+
   public func draw(in view: MTKView) {
-    frameStartTime = CACurrentMediaTime()
-    
-    guard let device = device,
-          let commandQueue = commandQueue,
-          let renderPassDescriptor = view.currentRenderPassDescriptor,
-          let commandBuffer = commandQueue.makeCommandBuffer(),
-          let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else {
+    guard let queue = context.commandQueue, let pipeline = ensurePipeline() else {
+      failPendingCaptures(MetalKitError.gpu("The view could not build its render pipeline."))
       return
     }
-    
-    // Set render pipeline state
-    if let renderPipelineState = renderPipelineState {
-      renderEncoder.setRenderPipelineState(renderPipelineState)
+    guard let passDescriptor = view.currentRenderPassDescriptor, let drawable = view.currentDrawable else {
+      failPendingCaptures(
+        MetalKitError.gpu("The view has no drawable yet (is it laid out with a non-zero size and on screen?).")
+      )
+      return
     }
-    
-    // Set depth stencil state
-    if let depthStencilState = depthStencilState {
-      renderEncoder.setDepthStencilState(depthStencilState)
+    guard let commandBuffer = queue.makeCommandBuffer(),
+      let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: passDescriptor)
+    else {
+      failPendingCaptures(MetalKitError.gpu("Failed to create a command buffer."))
+      return
     }
-    
-    // Render SceneKit scene
-    if let renderer = renderer {
-      renderer.render(atTime: CACurrentMediaTime())
+
+    let size = view.drawableSize
+    let aspect = size.height > 0 ? Float(size.width / size.height) : 1
+    var uniforms = SIMD4<Float>(Float(CACurrentMediaTime() - startTime), aspect, 0, 0)
+
+    encoder.label = "munim-metalkit default pass"
+    encoder.setRenderPipelineState(pipeline)
+    if let depthStencilState {
+      encoder.setDepthStencilState(depthStencilState)
     }
-    
-    // Draw basic geometry if no scene
-    if scene?.rootNode.childNodes.isEmpty ?? true {
-      drawBasicGeometry(renderEncoder: renderEncoder)
+    encoder.setVertexBytes(&uniforms, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
+    encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+    encoder.endEncoding()
+
+    let capture = encodeCaptureIfNeeded(commandBuffer: commandBuffer, texture: drawable.texture)
+
+    commandBuffer.present(drawable)
+    commandBuffer.addCompletedHandler { buffer in
+      if let gpuTime = gpuTimeMs(of: buffer) {
+        PerformanceStats.shared.recordFrameGpu(gpuTimeMs: gpuTime)
+      }
+      capture?(buffer)
     }
-    
-    renderEncoder.endEncoding()
-    
-    if let drawable = view.currentDrawable {
-      commandBuffer.present(drawable)
-    }
-    
     commandBuffer.commit()
-    
-    updatePerformanceMetrics()
+
+    PerformanceStats.shared.recordFrameEncoded(drawCalls: 1, triangles: 1)
+    emitFrameEvents()
   }
-  
-  private func drawBasicGeometry(renderEncoder: MTLRenderCommandEncoder) {
-    // Draw a simple triangle or cube
-    // This would be implemented with actual vertex data
+
+  private func emitFrameEvents() {
+    if !didEmitLoad {
+      didEmitLoad = true
+      onLoad(["deviceName": context.device?.name ?? "unknown"])
+    }
+    let now = CACurrentMediaTime()
+    if now - lastRenderEventTime >= 1 {
+      lastRenderEventTime = now
+      onRender(PerformanceStats.shared.snapshot())
+    }
   }
+
+  /// Copies the drawable into a CPU-visible buffer inside the frame's command buffer and returns
+  /// a completion callback that converts it into a PNG and settles the pending promises.
+  private func encodeCaptureIfNeeded(
+    commandBuffer: MTLCommandBuffer,
+    texture: MTLTexture
+  ) -> (@Sendable (MTLCommandBuffer) -> Void)? {
+    guard !pendingCaptures.isEmpty else { return nil }
+    let captures = pendingCaptures
+    pendingCaptures.removeAll()
+
+    let reject: (Exception) -> Void = { error in captures.forEach { $0.promise.reject(error) } }
+    let format = texture.pixelFormat
+    let bitmapInfo: UInt32
+    switch format {
+    case .bgra8Unorm, .bgra8Unorm_srgb:
+      bitmapInfo = CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue
+    case .rgba8Unorm, .rgba8Unorm_srgb:
+      bitmapInfo = CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+    default:
+      reject(
+        MetalKitError.unsupported(
+          "Screenshots support 8-bit BGRA/RGBA drawables, not \(MetalParsing.pixelFormatName(format)).")
+      )
+      return nil
+    }
+
+    let width = texture.width
+    let height = texture.height
+    let bytesPerRow = width * 4
+    guard let device = context.device,
+      let staging = device.makeBuffer(length: bytesPerRow * height, options: .storageModeShared),
+      let blit = commandBuffer.makeBlitCommandEncoder()
+    else {
+      reject(MetalKitError.gpu("Failed to allocate the screenshot staging buffer."))
+      return nil
+    }
+    blit.copy(
+      from: texture, sourceSlice: 0, sourceLevel: 0,
+      sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+      sourceSize: MTLSize(width: width, height: height, depth: 1),
+      to: staging, destinationOffset: 0,
+      destinationBytesPerRow: bytesPerRow, destinationBytesPerImage: bytesPerRow * height)
+    blit.endEncoding()
+
+    let requests = captures.map { (result: $0.result, promise: $0.promise) }
+    let box = UncheckedSendable(staging)
+    return { buffer in
+      if buffer.status == .error {
+        let message = buffer.error?.localizedDescription ?? "unknown error"
+        requests.forEach { $0.promise.reject(MetalKitError.gpu("Screenshot frame failed: \(message)")) }
+        return
+      }
+      let data = Data(bytes: box.value.contents(), count: bytesPerRow * height)
+      guard let png = encodePNG(data, width: width, height: height, bytesPerRow: bytesPerRow, bitmapInfo: bitmapInfo)
+      else {
+        requests.forEach { $0.promise.reject(MetalKitError.gpu("PNG encoding failed.")) }
+        return
+      }
+      for request in requests {
+        var payload: [String: Any] = ["width": width, "height": height]
+        if request.result == "file" {
+          let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("munim-metalkit-\(UUID().uuidString).png")
+          do {
+            try png.write(to: url)
+            payload["uri"] = url.absoluteString
+          } catch {
+            request.promise.reject(MetalKitError.gpu("Failed to write screenshot: \(error.localizedDescription)"))
+            continue
+          }
+        } else {
+          payload["base64"] = png.base64EncodedString()
+        }
+        request.promise.resolve(payload)
+      }
+    }
+  }
+}
+
+private func encodePNG(_ pixels: Data, width: Int, height: Int, bytesPerRow: Int, bitmapInfo: UInt32) -> Data? {
+  guard let provider = CGDataProvider(data: pixels as CFData),
+    let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+    let image = CGImage(
+      width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: bytesPerRow,
+      space: colorSpace, bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo), provider: provider,
+      decode: nil, shouldInterpolate: false, intent: .defaultIntent)
+  else {
+    return nil
+  }
+  let output = NSMutableData()
+  guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else {
+    return nil
+  }
+  CGImageDestinationAddImage(destination, image, nil)
+  guard CGImageDestinationFinalize(destination) else {
+    return nil
+  }
+  return output as Data
 }
