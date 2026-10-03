@@ -56,11 +56,16 @@ everything else rejects with a clear `ERR_NOT_IMPLEMENTED` error instead of sile
 
 Requires Expo SDK 57 (React Native 0.86, New Architecture) and iOS 16.4+.
 
+Building with Xcode 27: apps built with the iOS 27 SDK must adopt the UIScene lifecycle or they
+crash at launch on iOS 27 (Apple TN3187). With Expo SDK 57 that is one config plugin option:
+`["expo-build-properties", { "ios": { "enableSceneSupport": true } }]` (expo 57.0.23 or newer).
+The module itself does not use `UIScreen.main` or key-window lookups.
+
 ## What works
 
 | Area | API | iOS | Android | Web |
 | --- | --- | --- | --- | --- |
-| Device | `isMetalAvailable`, `getDeviceInfo` | Works | `false` / rejects | `false` / rejects |
+| Device | `isMetalAvailable`, `getDeviceInfo`, `getMetalCapabilities` | Works | `false` / rejects | `false` / rejects |
 | Buffers | `createBuffer`, `createBufferWithData`, `updateBuffer`, `getBufferContents`, `releaseBuffer` | Works (Shared and Private storage) | Rejects | Rejects |
 | Textures | `createTexture`, `updateTexture`, `readTexture`, `loadTextureFromURL`, `loadTextureFromData`, `generateMipmaps`, `releaseTexture` | Works (2D / 2D-array, Shared and Private) | Rejects | Rejects |
 | Shaders | `createShaderLibrary` (MSL source), `getShaderLibraryFunctionNames`, `releaseShaderLibrary` | Works, compiler errors are reported | Rejects | Rejects |
@@ -183,6 +188,31 @@ The view renders one built-in shader. Custom render pipelines can be created and
   and resolves with `{ gpuTimeMs, cpuTimeMs, threadgroups, threadsPerThreadgroup }`.
 - `threadsPerThreadgroup` defaults to the pipeline's `threadExecutionWidth`.
 
+### Metal 4 capabilities
+
+`getMetalCapabilities()` tells you what the device and OS support beyond the classic Metal API,
+without throwing for missing features:
+
+```ts
+const caps = await MunimMetalkit.getMetalCapabilities();
+// { osVersion: "27.0", compiledWithMetal4SDK: true, appleGPUFamily: 9, metal3: true, metal4: true,
+//   mtl4CommandQueue: true, mtl4Compiler: true, tensors: true, residencySets: true, raytracing: true }
+if (!caps.metal4) console.log(caps.unsupportedReason);
+```
+
+- `metal4` is `supportsFamily(.metal4)`: iOS 26+ on Apple A14 / M1 or newer. `mtl4CommandQueue`,
+  `mtl4Compiler` and `tensors` are only probed when it is true, by actually creating an
+  `MTL4CommandQueue`, an `MTL4Compiler` and a 4-element `MTLTensor` (once per process).
+- `compiledWithMetal4SDK` is false when the app was built with an Xcode older than 26, and always
+  false in the Simulator, whose SDK has no Metal 4 symbols. The probes are compiled behind
+  `#if compiler(>=6.2)`, so the module still builds with Xcode 16.
+- `residencySets` reports `MTLDevice.makeResidencySet` (iOS 18+). `appleGPUFamily` is the highest
+  `MTLGPUFamily.appleN`; `getDeviceInfo().gpuFamilies` now also lists `apple10`/`apple11` on GPUs
+  that have them.
+- The module itself still renders and computes through the classic `MTLCommandQueue`, which keeps
+  resources resident automatically, so it does not use `MTKView.residencySet` (iOS 26.4) or MTL4
+  command buffers yet.
+
 ### Performance
 
 `getPerformanceInfo()` returns the view's average frame interval, the GPU time of the last frame and
@@ -191,11 +221,11 @@ name, `recommendedMaxWorkingSetSize`, `currentAllocatedSize`, and live resource 
 
 ## Example app
 
-`example/` renders the view, runs a self-test on launch (compute doubling, buffer/texture round
-trips including Private storage, error paths, a screenshot, performance info) and logs one line:
+`example/` renders the view, runs a self-test on launch (Metal 4 capability report, compute doubling,
+buffer/texture round trips including Private storage, error paths, a screenshot, performance info) and logs one line:
 
 ```
-MUNIM_METALKIT_SELFTEST {"platform":"ios","passed":15,"failed":0,"checks":{...}}
+MUNIM_METALKIT_SELFTEST {"platform":"ios","passed":17,"failed":0,"checks":{...}}
 ```
 
 ```sh

@@ -43,6 +43,7 @@ class MunimMetalkitModule : Module() {
     /** Keep in sync with src/MunimMetalkitModule.ts. */
     private val ASYNC_METHODS = listOf(
       "getDeviceInfo" to 0,
+      "getMetalCapabilities" to 0,
       "createTexture" to 1,
       "loadTextureFromURL" to 2,
       "loadTextureFromData" to 2,

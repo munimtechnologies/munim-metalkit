@@ -84,8 +84,40 @@ export type DeviceInfo = {
   maxBufferLength: number;
   recommendedMaxWorkingSetSize: number;
   hasUnifiedMemory: boolean;
-  /** Supported Apple GPU families, e.g. `["apple4", ..., "apple9"]`. */
+  /** Supported Apple GPU families, e.g. `["apple4", ..., "apple9"]` (`apple10`/`apple11` on newer GPUs). */
   gpuFamilies: string[];
+};
+
+/**
+ * What the device and OS support beyond the classic Metal API, from `getMetalCapabilities()`.
+ * Every probe is guarded, so unsupported features are `false` rather than errors.
+ */
+export type MetalCapabilities = {
+  /** The running OS version, e.g. `"26.4"`. */
+  osVersion: string;
+  /**
+   * True when the module was compiled with the iOS 26+ device SDK, so the Metal 4 probes exist in
+   * the binary. Always false in the Simulator, whose SDK has no Metal 4 symbols.
+   */
+  compiledWithMetal4SDK: boolean;
+  /** Highest supported `MTLGPUFamily.appleN` generation (e.g. `9` for A17 Pro / M3), or null. */
+  appleGPUFamily: number | null;
+  /** `supportsFamily(.metal3)`. */
+  metal3: boolean;
+  /** `supportsFamily(.metal4)` (iOS 26+, Apple A14 / M1 or newer). */
+  metal4: boolean;
+  /** An `MTL4CommandQueue` could be created. */
+  mtl4CommandQueue: boolean;
+  /** An `MTL4Compiler` could be created. */
+  mtl4Compiler: boolean;
+  /** A small `MTLTensor` (Metal 4 machine-learning resource) could be allocated. */
+  tensors: boolean;
+  /** An `MTLResidencySet` could be created (iOS 18+). */
+  residencySets: boolean;
+  /** `supportsRaytracing`. */
+  raytracing: boolean;
+  /** Why `metal4` is false, when it is. */
+  unsupportedReason?: string;
 };
 
 // Texture Types

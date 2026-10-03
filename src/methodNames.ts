@@ -1,6 +1,7 @@
 // Every async method of the native module (keep in sync with MunimMetalkitModule.ts).
 export const ASYNC_METHOD_NAMES = [
   "getDeviceInfo",
+  "getMetalCapabilities",
   "createTexture",
   "loadTextureFromURL",
   "loadTextureFromData",
