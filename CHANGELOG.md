@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-10-03
+
+### Added
+
+- `getMetalCapabilities()` reports Metal 4 support: `supportsFamily(.metal4)`, whether an
+  `MTL4CommandQueue`, an `MTL4Compiler` and an `MTLTensor` can actually be created, residency set
+  support, ray tracing, the highest Apple GPU family and the OS version. Missing features are
+  reported as `false` with an `unsupportedReason`; Android and web reject with `ERR_METAL_UNAVAILABLE`.
+  The Metal 4 probes are compiled behind `#if compiler(>=6.2)` and `#available(iOS 26, *)`, so
+  the module still builds with Xcode 16 and runs on iOS 16.4.
+- `getDeviceInfo().gpuFamilies` also lists `apple10` and `apple11`.
+- Example self-test: capability-report consistency and GPU-family checks.
+
+### Changed
+
+- Example and dev dependencies on Expo SDK 57.0.26 (expo-modules-core 57.0.20). The example keeps
+  `expo-build-properties` `ios.enableSceneSupport` for Xcode 27 builds.
+
 ## [2.0.0] - 2026-09-19
 
 Honesty release: the 1.x API surface was mostly stubs. Everything that remains "working" is now

@@ -22,6 +22,7 @@ import type {
   LineStyle,
   MTLPixelFormat,
   Mesh,
+  MetalCapabilities,
   MeshDescriptor,
   MunimMetalkitModuleEvents,
   Path2D,
@@ -53,6 +54,11 @@ export declare class MunimMetalkitModule extends NativeModule<MunimMetalkitModul
   /** True on iOS devices/simulators with a Metal GPU. Always false on Android and web. */
   isMetalAvailable(): boolean;
   getDeviceInfo(): Promise<DeviceInfo>;
+  /**
+   * Reports Metal 4 support (MTL4 command queue and compiler, `MTLTensor`), residency sets and the
+   * Apple GPU family. Never rejects on iOS for missing features; they are reported as `false`.
+   */
+  getMetalCapabilities(): Promise<MetalCapabilities>;
 
   // Textures
 

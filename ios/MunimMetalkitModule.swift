@@ -33,10 +33,6 @@ public final class MunimMetalkitModule: Module, @unchecked Sendable {
     AsyncFunction("getDeviceInfo") { () -> [String: Any] in
       let device = try self.context.requireDevice()
       let threads = device.maxThreadsPerThreadgroup
-      let families: [(String, MTLGPUFamily)] = [
-        ("apple4", .apple4), ("apple5", .apple5), ("apple6", .apple6),
-        ("apple7", .apple7), ("apple8", .apple8), ("apple9", .apple9),
-      ]
       return [
         "name": device.name,
         "maxThreadsPerGroup": threads.width,
@@ -45,8 +41,13 @@ public final class MunimMetalkitModule: Module, @unchecked Sendable {
         "maxBufferLength": device.maxBufferLength,
         "recommendedMaxWorkingSetSize": Double(device.recommendedMaxWorkingSetSize),
         "hasUnifiedMemory": device.hasUnifiedMemory,
-        "gpuFamilies": families.filter { device.supportsFamily($0.1) }.map(\.0),
+        "gpuFamilies": GPUFamilies.supportedAppleFamilies(device),
       ]
+    }
+
+    AsyncFunction("getMetalCapabilities") { () -> [String: Any] in
+      let device = try self.context.requireDevice()
+      return MetalCapabilityProbe.report(device: device)
     }
 
     // MARK: Textures

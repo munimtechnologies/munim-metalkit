@@ -92,6 +92,9 @@ export async function runSelfTest(
     await check("createBuffer rejects", () =>
       expectRejection(MunimMetalkit.createBuffer({ length: 16 }), "ERR_METAL_UNAVAILABLE")
     );
+    await check("getMetalCapabilities rejects", () =>
+      expectRejection(MunimMetalkit.getMetalCapabilities(), "ERR_METAL_UNAVAILABLE")
+    );
     return finish(checks);
   }
 
@@ -101,6 +104,53 @@ export async function runSelfTest(
     const info = await MunimMetalkit.getDeviceInfo();
     if (!info.name) throw new Error("empty device name");
     return `${info.name}, maxThreads ${info.maxThreadsPerThreadgroup.width}, families ${info.gpuFamilies.join("/")}`;
+  });
+
+  await check("getMetalCapabilities is consistent", async () => {
+    const caps = await MunimMetalkit.getMetalCapabilities();
+    const flags = [
+      "compiledWithMetal4SDK",
+      "metal3",
+      "metal4",
+      "mtl4CommandQueue",
+      "mtl4Compiler",
+      "tensors",
+      "residencySets",
+      "raytracing",
+    ] as const;
+    const notBoolean = flags.filter((key) => typeof caps[key] !== "boolean");
+    if (notBoolean.length) throw new Error(`non-boolean fields: ${notBoolean.join(", ")}`);
+    if (!/^\d+\.\d+$/.test(caps.osVersion)) throw new Error(`osVersion ${caps.osVersion}`);
+    if (caps.metal4 && !(caps.mtl4CommandQueue && caps.mtl4Compiler)) {
+      throw new Error("metal4 is true but the MTL4 queue or compiler could not be created");
+    }
+    if (!caps.metal4 && !caps.unsupportedReason) throw new Error("metal4 false without a reason");
+    if (!caps.metal4 && (caps.mtl4CommandQueue || caps.tensors)) {
+      throw new Error("MTL4 objects reported without Metal 4 support");
+    }
+    const major = Number(caps.osVersion.split(".")[0]);
+    const appleFamily = caps.appleGPUFamily ?? 0;
+    // Metal 4 = Apple7 (A14 / M1) and newer on iOS 26+, when the binary has the probes compiled in.
+    const expectMetal4 = caps.compiledWithMetal4SDK && major >= 26 && appleFamily >= 7;
+    if (caps.metal4 !== expectMetal4) {
+      throw new Error(`metal4 ${caps.metal4}, expected ${expectMetal4} (iOS ${caps.osVersion}, apple${appleFamily})`);
+    }
+    if (major >= 18 && !caps.residencySets) throw new Error("residency sets unavailable on iOS 18+");
+    return JSON.stringify(caps);
+  });
+
+  await check("GPU family report matches getDeviceInfo", async () => {
+    const [info, caps] = await Promise.all([
+      MunimMetalkit.getDeviceInfo(),
+      MunimMetalkit.getMetalCapabilities(),
+    ]);
+    const highest = info.gpuFamilies
+      .map((name) => Number(name.replace("apple", "")))
+      .reduce((a, b) => Math.max(a, b), 0);
+    if (!caps.appleGPUFamily || caps.appleGPUFamily !== highest) {
+      throw new Error(`capabilities apple${caps.appleGPUFamily}, deviceInfo apple${highest}`);
+    }
+    return `apple${highest}`;
   });
 
   let libraryId: string | undefined;
