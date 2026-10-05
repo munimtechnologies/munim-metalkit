@@ -33,7 +33,7 @@
     "url": "https://github.com/munimtechnologies/munim-metalkit/issues"
   },
   "author": "sheehanmunim <sheehanmunim@gmail.com> (https://github.com/sheehanmunim)",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/munimtechnologies/munim-metalkit#readme",
   "dependencies": {},
   "devDependencies": {
