@@ -118,7 +118,9 @@ public final class MunimMetalkitView: ExpoView {
   func setColorPixelFormat(_ name: String) {
     do {
       let format = try MetalParsing.pixelFormat(name)
-      guard MetalParsing.bytesPerPixel(format) != nil, !MetalParsing.isDepth(format), format != .r32Float else {
+      // CAMetalLayer raises an Objective-C exception ("invalid pixel format") for anything outside its
+      // supported drawable formats, which would crash the app, so only those are passed through.
+      guard MetalParsing.isDrawableFormat(format) else {
         throw MetalKitError.invalidArgument("colorPixelFormat '\(name)' cannot be used for the view's drawable.")
       }
       metalView.colorPixelFormat = format

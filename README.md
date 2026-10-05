@@ -158,6 +158,10 @@ const shot = await ref.current?.takeScreenshot(); // { width, height, base64 }
 const file = await ref.current?.takeScreenshot({ result: "file" }); // { width, height, uri }
 ```
 
+`colorPixelFormat` must be a format `CAMetalLayer` can display: `BGRA8Unorm` (default),
+`BGRA8Unorm_sRGB`, `RGBA8Unorm`, `RGBA8Unorm_sRGB`, `RGB10A2Unorm` or `RGBA16Float`. Other formats
+are rejected through `onError` and the view keeps its current format.
+
 The view renders one built-in shader. Custom render pipelines can be created and validated with
 `createRenderPipelineState`, but there is no JavaScript draw API to use them in the view yet.
 
