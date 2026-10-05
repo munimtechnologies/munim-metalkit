@@ -12,7 +12,7 @@
     <img alt="Package version" src="https://img.shields.io/npm/v/munim-metalkit.svg?style=flat-square&label=Version&labelColor=000000&color=0066CC" />
   </a>
   <a aria-label="Package is free to use" href="https://github.com/munimtechnologies/munim-metalkit/blob/main/LICENSE" target="_blank">
-    <img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-success.svg?style=flat-square&color=33CC12" target="_blank" />
+    <img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache%202.0-success.svg?style=flat-square&color=33CC12" target="_blank" />
   </a>
   <a aria-label="package downloads" href="https://www.npmtrends.com/munim-metalkit" target="_blank">
     <img alt="Downloads" src="https://img.shields.io/npm/dm/munim-metalkit.svg?style=flat-square&labelColor=gray&color=33CC12&label=Downloads" />
@@ -158,6 +158,10 @@ const shot = await ref.current?.takeScreenshot(); // { width, height, base64 }
 const file = await ref.current?.takeScreenshot({ result: "file" }); // { width, height, uri }
 ```
 
+`colorPixelFormat` must be a format `CAMetalLayer` can display: `BGRA8Unorm` (default),
+`BGRA8Unorm_sRGB`, `RGBA8Unorm`, `RGBA8Unorm_sRGB`, `RGB10A2Unorm` or `RGBA16Float`. Other formats
+are rejected through `onError` and the view keeps its current format.
+
 The view renders one built-in shader. Custom render pipelines can be created and validated with
 `createRenderPipelineState`, but there is no JavaScript draw API to use them in the view yet.
 
@@ -253,7 +257,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 

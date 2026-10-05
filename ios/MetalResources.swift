@@ -236,6 +236,17 @@ enum MetalParsing {
     }
   }
 
+  /// Color formats `CAMetalLayer` accepts for its drawables (and that `pixelFormat(_:)` can parse).
+  /// Setting any other format (e.g. RG11B10Float, RGB9E5Float, RGBA32Float) throws `CAMetalLayerInvalid`.
+  static func isDrawableFormat(_ format: MTLPixelFormat) -> Bool {
+    switch format {
+    case .bgra8Unorm, .bgra8Unorm_srgb, .rgba8Unorm, .rgba8Unorm_srgb, .rgb10a2Unorm, .rgba16Float:
+      return true
+    default:
+      return false
+    }
+  }
+
   static func hasStencil(_ format: MTLPixelFormat) -> Bool {
     return format == .depth32Float_stencil8 || format == .stencil8
   }
