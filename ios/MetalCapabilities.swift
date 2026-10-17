@@ -35,6 +35,26 @@ enum MetalCapabilityProbe {
   private static let lock = NSLock()
   nonisolated(unsafe) private static var cached: [String: Any]?
 
+  /// `report(device:)` as the Nitro struct returned to JavaScript.
+  static func nativeReport(device: MTLDevice) -> NativeMetalCapabilities {
+    let report = report(device: device)
+    func flag(_ key: String) -> Bool {
+      return report[key] as? Bool ?? false
+    }
+    return NativeMetalCapabilities(
+      osVersion: report["osVersion"] as? String ?? "",
+      compiledWithMetal4SDK: flag("compiledWithMetal4SDK"),
+      appleGPUFamily: (report["appleGPUFamily"] as? Int).map(Double.init),
+      metal3: flag("metal3"),
+      metal4: flag("metal4"),
+      mtl4CommandQueue: flag("mtl4CommandQueue"),
+      mtl4Compiler: flag("mtl4Compiler"),
+      tensors: flag("tensors"),
+      residencySets: flag("residencySets"),
+      raytracing: flag("raytracing"),
+      unsupportedReason: report["unsupportedReason"] as? String)
+  }
+
   static func report(device: MTLDevice) -> [String: Any] {
     return lock.withLock {
       if let cached {

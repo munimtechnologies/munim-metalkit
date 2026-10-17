@@ -1,6 +1,6 @@
-import ExpoModulesCore
 import Foundation
 import Metal
+import NitroModules
 import QuartzCore
 
 // MARK: - Shared device
@@ -116,18 +116,17 @@ final class PerformanceStats: @unchecked Sendable {
     lock.withLock { lastFrameGpuTimeMs = gpuTimeMs }
   }
 
-  func snapshot() -> [String: Any] {
+  func snapshot() -> NativeFrameStats {
     return lock.withLock {
       let average = frameIntervalsMs.isEmpty ? 0 : frameIntervalsMs.reduce(0, +) / Double(frameIntervalsMs.count)
-      return [
-        "frameTime": average,
-        "fps": average > 0 ? 1000 / average : 0,
-        "gpuFrameTime": lastFrameGpuTimeMs as Any,
-        "lastComputeGpuTime": lastComputeGpuTimeMs as Any,
-        "framesRendered": framesRendered,
-        "drawCallCount": lastFrameDrawCalls,
-        "triangleCount": lastFrameTriangles,
-      ]
+      return NativeFrameStats(
+        frameTime: average,
+        fps: average > 0 ? 1000 / average : 0,
+        gpuFrameTime: lastFrameGpuTimeMs,
+        lastComputeGpuTime: lastComputeGpuTimeMs,
+        framesRendered: Double(framesRendered),
+        drawCallCount: Double(lastFrameDrawCalls),
+        triangleCount: Double(lastFrameTriangles))
     }
   }
 }
@@ -144,37 +143,87 @@ func gpuTimeMs(of commandBuffer: MTLCommandBuffer) -> Double? {
 
 // MARK: - Errors
 
-enum MetalKitError {
-  static func make(_ code: String, _ message: String) -> Exception {
-    return Exception(name: "MunimMetalkitError", description: message, code: code)
+/// An error with a stable code. Nitro passes `description` to JavaScript as the error message;
+/// the TypeScript wrapper turns the `[ERR_...]` prefix back into `error.code`.
+struct MetalKitException: Error, CustomStringConvertible, LocalizedError {
+  let code: String
+  let reason: String
+
+  var description: String {
+    return "[\(code)] \(reason)"
   }
 
-  static func deviceNotAvailable() -> Exception {
+  var errorDescription: String? {
+    return description
+  }
+}
+
+enum MetalKitError {
+  static func make(_ code: String, _ message: String) -> MetalKitException {
+    return MetalKitException(code: code, reason: message)
+  }
+
+  /// Keeps coded errors as they are and gives any other error (file system, networking, ...) a code.
+  static func wrap(_ error: Error) -> MetalKitException {
+    if let error = error as? MetalKitException {
+      return error
+    }
+    return make("ERR_UNEXPECTED", error.localizedDescription)
+  }
+
+  static func deviceNotAvailable() -> MetalKitException {
     return make("ERR_METAL_UNAVAILABLE", "Metal is not available on this device.")
   }
 
-  static func notFound(kind: String, id: String) -> Exception {
+  static func notFound(kind: String, id: String) -> MetalKitException {
     return make("ERR_NOT_FOUND", "No \(kind) with id '\(id)'. It may have been released.")
   }
 
-  static func invalidArgument(_ message: String) -> Exception {
+  static func invalidArgument(_ message: String) -> MetalKitException {
     return make("ERR_INVALID_ARGUMENT", message)
   }
 
-  static func unsupported(_ message: String) -> Exception {
+  static func unsupported(_ message: String) -> MetalKitException {
     return make("ERR_UNSUPPORTED", message)
   }
 
-  static func gpu(_ message: String) -> Exception {
+  static func gpu(_ message: String) -> MetalKitException {
     return make("ERR_GPU", message)
   }
+}
 
-  static func notImplemented(_ name: String) -> Exception {
-    return make(
-      "ERR_NOT_IMPLEMENTED",
-      "munim-metalkit: \(name)() is not implemented. See the \"What works\" table in the README."
-    )
+// MARK: - Promise helpers
+
+/// Background queue for the module's async work. Metal objects and the registries are
+/// thread-safe, so work runs concurrently (as Expo's async functions did).
+private let workQueue = DispatchQueue(label: "munim-metalkit.work", qos: .userInitiated, attributes: .concurrent)
+
+/// Runs `body` off the JavaScript thread and settles a Nitro promise with its result.
+func runAsync<T>(_ body: @escaping () throws -> T) -> Promise<T> {
+  let promise = Promise<T>()
+  workQueue.async {
+    do {
+      promise.resolve(withResult: try body())
+    } catch {
+      promise.reject(withError: MetalKitError.wrap(error))
+    }
   }
+  return promise
+}
+
+/// Runs `body` on the main thread (views) and settles a Nitro promise with its result.
+func runOnMain<T>(_ body: @escaping @MainActor () throws -> T) -> Promise<T> {
+  let promise = Promise<T>()
+  DispatchQueue.main.async {
+    MainActor.assumeIsolated {
+      do {
+        promise.resolve(withResult: try body())
+      } catch {
+        promise.reject(withError: MetalKitError.wrap(error))
+      }
+    }
+  }
+  return promise
 }
 
 // MARK: - Parsing
@@ -332,99 +381,175 @@ enum MetalParsing {
   }
 }
 
-// MARK: - Records
+// MARK: - Arguments
 
-struct SizeRecord: Record {
-  @Field var width: Int = 1
-  @Field var height: Int = 1
-  @Field var depth: Int = 1
+/// Converts a JavaScript number to an `Int`, rejecting non-integers instead of trapping.
+func intArg(_ value: Double?, _ name: String, default fallback: Int) throws -> Int {
+  guard let value else { return fallback }
+  return try intArg(value, name)
+}
+
+func intArg(_ value: Double, _ name: String) throws -> Int {
+  guard value.isFinite, value.rounded() == value, abs(value) <= 9_007_199_254_740_991 else {
+    throw MetalKitError.invalidArgument("\(name) must be an integer, got \(value).")
+  }
+  return Int(value)
+}
+
+func optionalIntArg(_ value: Double?, _ name: String) throws -> Int? {
+  guard let value else { return nil }
+  return try intArg(value, name)
+}
+
+// MARK: - Records (native structs with the documented defaults applied)
+
+struct SizeRecord {
+  var width = 1
+  var height = 1
+  var depth = 1
+
+  init() {}
+
+  init(_ size: NativeThreadSize) throws {
+    width = try intArg(size.width, "width", default: 1)
+    height = try intArg(size.height, "height", default: 1)
+    depth = try intArg(size.depth, "depth", default: 1)
+  }
 
   var mtlSize: MTLSize {
     return MTLSize(width: width, height: height, depth: depth)
   }
 }
 
-struct TextureDescriptorRecord: Record {
-  @Field var width: Int = 0
-  @Field var height: Int = 0
-  @Field var pixelFormat: String = "RGBA8Unorm"
-  @Field var usage: Either<String, [String]>? = nil
-  @Field var mipmapLevelCount: Int = 1
-  @Field var sampleCount: Int = 1
-  @Field var arrayLength: Int = 1
-  @Field var depth: Int = 1
-  @Field var storageMode: String? = nil
+struct TextureDescriptorRecord {
+  var width = 0
+  var height = 0
+  var pixelFormat = "RGBA8Unorm"
+  var usage: [String]? = nil
+  var mipmapLevelCount = 1
+  var sampleCount = 1
+  var arrayLength = 1
+  var depth = 1
+  var storageMode: String? = nil
+
+  init(_ descriptor: NativeTextureDescriptor) throws {
+    width = try intArg(descriptor.width, "width", default: 0)
+    height = try intArg(descriptor.height, "height", default: 0)
+    pixelFormat = descriptor.pixelFormat ?? "RGBA8Unorm"
+    usage = descriptor.usage
+    mipmapLevelCount = try intArg(descriptor.mipmapLevelCount, "mipmapLevelCount", default: 1)
+    sampleCount = try intArg(descriptor.sampleCount, "sampleCount", default: 1)
+    arrayLength = try intArg(descriptor.arrayLength, "arrayLength", default: 1)
+    depth = try intArg(descriptor.depth, "depth", default: 1)
+    storageMode = descriptor.storageMode
+  }
 }
 
-struct TextureRegionRecord: Record {
-  @Field var x: Int = 0
-  @Field var y: Int = 0
-  @Field var width: Int? = nil
-  @Field var height: Int? = nil
+struct TextureRegionRecord {
+  var x = 0
+  var y = 0
+  var width: Int? = nil
+  var height: Int? = nil
+
+  init() {}
+
+  init(_ region: NativeTextureRegion?) throws {
+    guard let region else { return }
+    x = try intArg(region.x, "x", default: 0)
+    y = try intArg(region.y, "y", default: 0)
+    width = try optionalIntArg(region.width, "width")
+    height = try optionalIntArg(region.height, "height")
+  }
 }
 
-struct TextureTransferOptionsRecord: Record {
-  @Field var bytesPerRow: Int? = nil
-  @Field var mipmapLevel: Int = 0
-  @Field var slice: Int = 0
+struct TextureTransferOptionsRecord {
+  var bytesPerRow: Int? = nil
+  var mipmapLevel = 0
+  var slice = 0
+
+  init() {}
+
+  init(_ options: NativeTextureTransferOptions?) throws {
+    guard let options else { return }
+    bytesPerRow = try optionalIntArg(options.bytesPerRow, "bytesPerRow")
+    mipmapLevel = try intArg(options.mipmapLevel, "mipmapLevel", default: 0)
+    slice = try intArg(options.slice, "slice", default: 0)
+  }
 }
 
-struct TextureLoadOptionsRecord: Record {
+struct TextureLoadOptionsRecord {
   /// Decode as sRGB (`RGBA8Unorm_sRGB`). Defaults to false so texel values match the file bytes.
-  @Field var srgb: Bool = false
-  @Field var storageMode: String? = nil
-  @Field var generateMipmaps: Bool = false
+  var srgb = false
+  var storageMode: String? = nil
+  var generateMipmaps = false
+
+  init(_ options: NativeTextureLoadOptions?) {
+    guard let options else { return }
+    srgb = options.srgb ?? false
+    storageMode = options.storageMode
+    generateMipmaps = options.generateMipmaps ?? false
+  }
 }
 
-struct BufferDescriptorRecord: Record {
-  @Field var length: Int = 0
-  @Field var options: String? = nil
+struct ColorAttachmentRecord {
+  var pixelFormat = "BGRA8Unorm"
+  var isBlendingEnabled = false
+  var rgbBlendOperation: String? = nil
+  var alphaBlendOperation: String? = nil
+  var sourceRGBBlendFactor: String? = nil
+  var sourceAlphaBlendFactor: String? = nil
+  var destinationRGBBlendFactor: String? = nil
+  var destinationAlphaBlendFactor: String? = nil
+
+  init() {}
+
+  init(_ attachment: NativeColorAttachment) {
+    pixelFormat = attachment.pixelFormat ?? "BGRA8Unorm"
+    isBlendingEnabled = attachment.isBlendingEnabled ?? false
+    rgbBlendOperation = attachment.rgbBlendOperation
+    alphaBlendOperation = attachment.alphaBlendOperation
+    sourceRGBBlendFactor = attachment.sourceRGBBlendFactor
+    sourceAlphaBlendFactor = attachment.sourceAlphaBlendFactor
+    destinationRGBBlendFactor = attachment.destinationRGBBlendFactor
+    destinationAlphaBlendFactor = attachment.destinationAlphaBlendFactor
+  }
 }
 
-struct ColorAttachmentRecord: Record {
-  @Field var pixelFormat: String = "BGRA8Unorm"
-  @Field var isBlendingEnabled: Bool = false
-  @Field var rgbBlendOperation: String? = nil
-  @Field var alphaBlendOperation: String? = nil
-  @Field var sourceRGBBlendFactor: String? = nil
-  @Field var sourceAlphaBlendFactor: String? = nil
-  @Field var destinationRGBBlendFactor: String? = nil
-  @Field var destinationAlphaBlendFactor: String? = nil
+struct RenderPipelineDescriptorRecord {
+  var libraryId = ""
+  var vertexFunction = ""
+  var fragmentFunction: String? = nil
+  var colorAttachments: [ColorAttachmentRecord]? = nil
+  var depthAttachmentPixelFormat: String? = nil
+  var stencilAttachmentPixelFormat: String? = nil
+  var sampleCount = 1
+  var alphaToCoverageEnabled = false
+  var alphaToOneEnabled = false
+  var rasterizationEnabled = true
+
+  init(_ descriptor: NativeRenderPipelineDescriptor) throws {
+    libraryId = descriptor.libraryId ?? ""
+    vertexFunction = descriptor.vertexFunction ?? ""
+    fragmentFunction = descriptor.fragmentFunction
+    colorAttachments = descriptor.colorAttachments?.map { ColorAttachmentRecord($0) }
+    depthAttachmentPixelFormat = descriptor.depthAttachmentPixelFormat
+    stencilAttachmentPixelFormat = descriptor.stencilAttachmentPixelFormat
+    sampleCount = try intArg(descriptor.sampleCount, "sampleCount", default: 1)
+    alphaToCoverageEnabled = descriptor.alphaToCoverageEnabled ?? false
+    alphaToOneEnabled = descriptor.alphaToOneEnabled ?? false
+    rasterizationEnabled = descriptor.rasterizationEnabled ?? true
+  }
 }
 
-struct RenderPipelineDescriptorRecord: Record {
-  @Field var libraryId: String = ""
-  @Field var vertexFunction: String = ""
-  @Field var fragmentFunction: String? = nil
-  @Field var colorAttachments: [ColorAttachmentRecord]? = nil
-  @Field var depthAttachmentPixelFormat: String? = nil
-  @Field var stencilAttachmentPixelFormat: String? = nil
-  @Field var sampleCount: Int = 1
-  @Field var alphaToCoverageEnabled: Bool = false
-  @Field var alphaToOneEnabled: Bool = false
-  @Field var rasterizationEnabled: Bool = true
-}
+struct DispatchOptionsRecord {
+  var threadsPerThreadgroup: SizeRecord? = nil
+  var textures: [String]? = nil
 
-struct DispatchOptionsRecord: Record {
-  @Field var threadsPerThreadgroup: SizeRecord? = nil
-  @Field var textures: [String]? = nil
-}
-
-struct ScreenshotOptionsRecord: Record {
-  /// "base64" (default) returns a base64 PNG string, "file" writes a PNG to the caches directory.
-  @Field var result: String = "base64"
-}
-
-struct ClearColorRecord: Record {
-  @Field var red: Double = 0
-  @Field var green: Double = 0
-  @Field var blue: Double = 0
-  @Field var alpha: Double = 1
-}
-
-struct DrawableSizeRecord: Record {
-  @Field var width: Double = 0
-  @Field var height: Double = 0
+  init(_ options: NativeDispatchOptions?) throws {
+    guard let options else { return }
+    threadsPerThreadgroup = try options.threadsPerThreadgroup.map { try SizeRecord($0) }
+    textures = options.textures
+  }
 }
 
 // MARK: - Sendable helpers

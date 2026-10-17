@@ -1,5 +1,6 @@
-// Every async method of the native module (keep in sync with MunimMetalkitModule.ts).
-export const ASYNC_METHOD_NAMES = [
+// Async methods of the native module that have a native implementation (keep in sync with
+// src/specs/MunimMetalkit.nitro.ts).
+const IMPLEMENTED_ASYNC_METHOD_NAMES = [
   "getDeviceInfo",
   "getMetalCapabilities",
   "createTexture",
@@ -32,6 +33,11 @@ export const ASYNC_METHOD_NAMES = [
   "setDrawableSize",
   "takeScreenshot",
   "getPerformanceInfo",
+] as const;
+
+// Declared since 1.x without native code: they reject with ERR_NOT_IMPLEMENTED (iOS) or
+// ERR_METAL_UNAVAILABLE (Android, web).
+export const NOT_IMPLEMENTED_METHOD_NAMES = [
   "createMesh",
   "loadMeshFromURL",
   "loadMeshFromData",
@@ -82,4 +88,10 @@ export const ASYNC_METHOD_NAMES = [
   "setCanvas2DPixel",
   "getCanvas2DData",
   "setCanvas2DData",
+] as const;
+
+// Every async method of the module (keep in sync with MunimMetalkitModule.ts).
+export const ASYNC_METHOD_NAMES = [
+  ...IMPLEMENTED_ASYNC_METHOD_NAMES,
+  ...NOT_IMPLEMENTED_METHOD_NAMES,
 ] as const;

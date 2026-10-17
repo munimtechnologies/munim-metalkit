@@ -1,17 +1,20 @@
 {
   "name": "munim-metalkit",
   "version": "2.1.0",
-  "description": "Metal compute, runtime shaders, textures and an MTKView for Expo on iOS",
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
+  "description": "Metal compute, runtime shaders, textures and an MTKView for Expo and React Native on iOS, powered by Nitro Modules",
+  "main": "./lib/commonjs/index.js",
+  "module": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "react-native": "src/index",
+  "source": "src/index",
   "scripts": {
-    "build": "expo-module build",
-    "clean": "expo-module clean",
-    "lint": "expo-module lint",
-    "test": "expo-module test",
-    "prepare": "expo-module prepare",
-    "prepublishOnly": "expo-module prepublishOnly",
-    "expo-module": "expo-module",
+    "typecheck": "tsc --noEmit",
+    "typecheck:example": "tsc --noEmit -p example/tsconfig.json",
+    "lint": "eslint \"src/**/*.{js,ts,tsx}\" --max-warnings 0",
+    "build": "npm run typecheck && bob build",
+    "clean": "rm -rf lib android/build android/.cxx",
+    "codegen": "nitrogen --logLevel=\"debug\" && node scripts/patch-nitro-optionals.js && node scripts/patch-nitrogen-swift.mjs && node scripts/copy-view-config.js",
+    "prepack": "npm run build",
     "open:ios": "xed example/ios",
     "open:android": "open -a \"Android Studio\" example/android"
   },
@@ -20,10 +23,40 @@
     "expo",
     "metal",
     "metalkit",
+    "mtkview",
     "gpu",
     "compute",
+    "shaders",
     "ios",
-    "munim-metalkit"
+    "typescript",
+    "nitro",
+    "nitro-modules",
+    "munim-metalkit",
+    "munim-technologies"
+  ],
+  "files": [
+    "src",
+    "react-native.config.js",
+    "lib",
+    "nitrogen",
+    "nitro.json",
+    "android/build.gradle",
+    "android/fix-prefab.gradle",
+    "android/gradle.properties",
+    "android/CMakeLists.txt",
+    "android/src",
+    "ios/**/*.h",
+    "ios/**/*.m",
+    "ios/**/*.mm",
+    "ios/**/*.cpp",
+    "ios/**/*.swift",
+    "*.podspec",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "workspaces": [
+    "example"
   ],
   "repository": {
     "type": "git",
@@ -35,21 +68,79 @@
   "author": "sheehanmunim <sheehanmunim@gmail.com> (https://github.com/sheehanmunim)",
   "license": "Apache-2.0",
   "homepage": "https://github.com/munimtechnologies/munim-metalkit#readme",
-  "dependencies": {},
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "expo": {
+    "name": "munim-metalkit",
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  },
   "devDependencies": {
-    "@types/react": "~19.2.2",
-    "expo": "~57.0.26",
-    "expo-module-scripts": "^56.0.3",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
+    "@react-native/babel-preset": "0.88.0",
+    "@react-native/eslint-config": "0.88.0",
+    "@types/react": "~19.3.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "nitrogen": "0.37.1",
+    "prettier": "^3.8.3",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-builder-bob": "^0.43.1",
+    "react-native-nitro-modules": "0.37.1",
     "typescript": "~6.0.3"
   },
   "peerDependencies": {
-    "expo": "*",
     "react": "*",
-    "react-native": "*"
+    "react-native": "*",
+    "react-native-nitro-modules": ">=0.37.1 <1"
   },
   "overrides": {
     "uuid": "^11.1.1"
+  },
+  "eslintConfig": {
+    "root": true,
+    "extends": [
+      "@react-native",
+      "prettier"
+    ],
+    "plugins": [
+      "prettier"
+    ],
+    "rules": {
+      "prettier/prettier": "warn"
+    }
+  },
+  "eslintIgnore": [
+    "node_modules/",
+    "lib/",
+    "build/",
+    "nitrogen/generated/"
+  ],
+  "prettier": {
+    "quoteProps": "consistent",
+    "singleQuote": false,
+    "tabWidth": 2,
+    "trailingComma": "all",
+    "useTabs": false,
+    "semi": true
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      "commonjs",
+      "module",
+      [
+        "typescript",
+        {
+          "project": "tsconfig.json"
+        }
+      ]
+    ]
   }
 }
