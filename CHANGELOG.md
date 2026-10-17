@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Breaking:** munim-metalkit is now a Nitro module ( >= 0.37.1, a new peer dependency) instead of an Expo module, like the other munim packages.  is no longer required. Expo apps keep working through prebuild autolinking with no config plugin, and bare React Native apps can now use the package too. See "Upgrading from 2.x" in the README.
-- The JavaScript API is unchanged: the same exports, types, Promise and sync split, error codes and messages, view props,  events and the  /  ref. The MTKView is a Nitro HybridView.
-- The default export no longer extends Expo's . It never emitted events; , , ,  and  remain as no-ops.
-- Android keeps reporting Metal as unavailable. The view ref's  and  now exist there and reject with .
+- **Breaking:** munim-metalkit is now a Nitro module (`react-native-nitro-modules` >= 0.37.1, a new peer dependency) instead of an Expo module, like the other munim packages. `expo-modules-core` is no longer required. Expo apps keep working through prebuild autolinking with no config plugin, and bare React Native apps can now use the package too. See "Upgrading from 2.x" in the README.
+- The JavaScript API is unchanged: the same exports, types, Promise and sync split, error codes and messages, view props, `{ nativeEvent }` events and the `takeScreenshot()` / `renderFrame()` ref. The MTKView is a Nitro HybridView.
+- The default export no longer extends Expo's `NativeModule`. It never emitted events; `addListener`, `removeListener`, `removeAllListeners`, `emit` and `listenerCount` remain as no-ops.
+- Android keeps reporting Metal as unavailable. The view ref's `takeScreenshot()` and `renderFrame()` now exist there and reject with `ERR_METAL_UNAVAILABLE`.
 - Example app on Expo SDK 58 and React Native 0.88.
 - Nitro 0.37 does not build for iOS on React Native 0.83 and older with static CocoaPods (margelo/nitro#1573); stay on 2.x there.
 
