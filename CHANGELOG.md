@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-16
+
+### Changed
+
+- **Breaking:** munim-metalkit is now a Nitro module ( >= 0.37.1, a new peer dependency) instead of an Expo module, like the other munim packages.  is no longer required. Expo apps keep working through prebuild autolinking with no config plugin, and bare React Native apps can now use the package too. See "Upgrading from 2.x" in the README.
+- The JavaScript API is unchanged: the same exports, types, Promise and sync split, error codes and messages, view props,  events and the  /  ref. The MTKView is a Nitro HybridView.
+- The default export no longer extends Expo's . It never emitted events; , , ,  and  remain as no-ops.
+- Android keeps reporting Metal as unavailable. The view ref's  and  now exist there and reject with .
+- Example app on Expo SDK 58 and React Native 0.88.
+- Nitro 0.37 does not build for iOS on React Native 0.83 and older with static CocoaPods (margelo/nitro#1573); stay on 2.x there.
+
+Self-test, Release builds: iPad Air M3 (iPadOS 27.0.1) 17/17, the same as 2.1.0; Galaxy A14 (Android 15) 4/4.
+
 ## [2.1.0] - 2026-10-03
 
 ### Added

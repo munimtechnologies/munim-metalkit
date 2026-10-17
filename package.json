@@ -1,6 +1,6 @@
 {
   "name": "munim-metalkit",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Metal compute, runtime shaders, textures and an MTKView for Expo and React Native on iOS, powered by Nitro Modules",
   "main": "./lib/commonjs/index.js",
   "module": "./lib/module/index.js",
