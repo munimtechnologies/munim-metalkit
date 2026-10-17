@@ -39,7 +39,7 @@ export default function App() {
         const file = new File(Paths.document, "munim-metalkit-selftest.json");
         if (file.exists) file.delete();
         file.create();
-        file.write(JSON.stringify(result));
+        file.writeSync(JSON.stringify(result));
       } catch (error) {
         console.warn("could not write the self-test result file", error);
       }

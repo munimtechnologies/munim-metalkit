@@ -1,21 +1,38 @@
-import { requireNativeView } from "expo";
 import * as React from "react";
+import { StyleSheet } from "react-native";
+import {
+  callback,
+  getHostComponent,
+  type HybridRef,
+} from "react-native-nitro-modules";
 
+import MunimMetalkitViewConfig from "./specs/MunimMetalkitViewConfig.json";
 import type {
   MunimMetalkitViewProps,
   MunimMetalkitViewRef,
+  ScreenshotOptions,
 } from "./MunimMetalkit.types";
+import { call, makeError, toScreenshot } from "./internal";
+import type { NativeFrameStats } from "./specs/MunimMetalkit.nitro";
+import type {
+  MetalViewMethods,
+  MetalViewProps,
+  NativeErrorEvent,
+  NativeLoadEvent,
+} from "./specs/MunimMetalkitView.nitro";
 
-type NativeProps = Omit<
-  MunimMetalkitViewProps,
-  "scene" | "camera" | "lighting" | "onAnimationComplete"
->;
+const NativeView = getHostComponent<MetalViewProps, MetalViewMethods>(
+  "MunimMetalkitView",
+  () => MunimMetalkitViewConfig,
+);
 
-const NativeView: React.ComponentType<
-  NativeProps & React.RefAttributes<MunimMetalkitViewRef>
-> = requireNativeView("MunimMetalkit");
+type NativeViewRef = HybridRef<MetalViewProps, MetalViewMethods>;
 
 const warned = new Set<string>();
+
+function nullable<T>(value: T | undefined): T | null {
+  return value === undefined ? null : value;
+}
 
 /**
  * An MTKView that renders the package's built-in shader (a rotating RGB triangle).
@@ -24,13 +41,20 @@ const warned = new Set<string>();
 const MunimMetalkitView = React.forwardRef<
   MunimMetalkitViewRef,
   MunimMetalkitViewProps
->(function MunimMetalkitView(props, ref) {
+>(function MunimMetalkitViewImpl(props, ref) {
   const {
     style,
     scene,
     camera,
     lighting,
-    onAnimationComplete: _unused,
+    // Never called (animations are not implemented); kept out of the native props.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    onAnimationComplete,
+    onLoad,
+    onRender,
+    onError,
+    drawableSize,
+    clearColor,
     ...rest
   } = props;
 
@@ -49,7 +73,86 @@ const MunimMetalkitView = React.forwardRef<
     }
   }
 
-  return <NativeView ref={ref} style={[{ flex: 1 }, style]} {...rest} />;
+  // Event handlers are read through a ref so the native callbacks stay stable across renders.
+  const handlers = React.useRef({ onLoad, onRender, onError });
+  handlers.current = { onLoad, onRender, onError };
+
+  const nativeRef = React.useRef<NativeViewRef | null>(null);
+  const native = React.useMemo(
+    () => ({
+      hybridRef: callback((view: NativeViewRef) => {
+        nativeRef.current = view;
+      }),
+      onLoad: callback((event: NativeLoadEvent) => {
+        handlers.current.onLoad?.({
+          nativeEvent: { deviceName: event.deviceName },
+        });
+      }),
+      onRender: callback((event: NativeFrameStats) => {
+        handlers.current.onRender?.({
+          nativeEvent: {
+            frameTime: event.frameTime,
+            fps: event.fps,
+            gpuFrameTime: nullable(event.gpuFrameTime),
+            lastComputeGpuTime: nullable(event.lastComputeGpuTime),
+            framesRendered: event.framesRendered,
+            drawCallCount: event.drawCallCount,
+            triangleCount: event.triangleCount,
+          },
+        });
+      }),
+      onError: callback((event: NativeErrorEvent) => {
+        handlers.current.onError?.({
+          nativeEvent: { error: event.error, code: event.code },
+        });
+      }),
+    }),
+    [],
+  );
+
+  React.useImperativeHandle(ref, () => {
+    const view = () => {
+      const current = nativeRef.current;
+      if (!current) {
+        throw makeError(
+          "ERR_INVALID_ARGUMENT",
+          "MunimMetalkitView is not mounted.",
+        );
+      }
+      return current;
+    };
+    return {
+      takeScreenshot: (options?: ScreenshotOptions) =>
+        call(async () => toScreenshot(await view().takeScreenshot(options))),
+      renderFrame: () => call(() => view().renderFrame()),
+    };
+  }, []);
+
+  return (
+    <NativeView
+      {...rest}
+      style={[styles.fill, style]}
+      drawableSize={
+        drawableSize ? [drawableSize.width, drawableSize.height] : undefined
+      }
+      clearColor={
+        clearColor
+          ? [
+              clearColor.red ?? 0,
+              clearColor.green ?? 0,
+              clearColor.blue ?? 0,
+              clearColor.alpha ?? 1,
+            ]
+          : undefined
+      }
+      hybridRef={native.hybridRef}
+      onLoad={native.onLoad}
+      onRender={native.onRender}
+      onError={native.onError}
+    />
+  );
 });
+
+const styles = StyleSheet.create({ fill: { flex: 1 } });
 
 export default MunimMetalkitView;

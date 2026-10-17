@@ -47,17 +47,19 @@
 
 **munim-metalkit** exposes a small, working slice of Apple's Metal to React Native / Expo apps:
 compile Metal Shading Language at runtime, run compute kernels on your own buffers and textures, and
-host an `MTKView` you can screenshot.
+host an `MTKView` you can screenshot. It is built on [Nitro Modules](https://nitro.margelo.com)
+(a Swift HybridObject and a HybridView), so it works in bare React Native apps and in Expo apps.
 
 It is **iOS-only**. Earlier 1.x releases advertised a complete MetalKit API with Android (OpenGL ES)
 and web (WebGL) backends; most of that was stubs that returned fake ids. 2.0 removes the pretence:
 everything below marked "Works" is implemented and covered by the example app's self-test, and
 everything else rejects with a clear `ERR_NOT_IMPLEMENTED` error instead of silently succeeding.
 
-Requires Expo SDK 57 (React Native 0.86, New Architecture) and iOS 16.4+.
+Requires React Native with the New Architecture, `react-native-nitro-modules` 0.37.1 or newer,
+and iOS 16.4+. Tested with React Native 0.88 (Expo SDK 58). Expo is not required.
 
 Building with Xcode 27: apps built with the iOS 27 SDK must adopt the UIScene lifecycle or they
-crash at launch on iOS 27 (Apple TN3187). With Expo SDK 57 that is one config plugin option:
+crash at launch on iOS 27 (Apple TN3187). In an Expo app that is one config plugin option:
 `["expo-build-properties", { "ios": { "enableSceneSupport": true } }]` (expo 57.0.23 or newer).
 The module itself does not use `UIScreen.main` or key-window lookups.
 
@@ -96,8 +98,19 @@ On Android and web every async method rejects with `ERR_METAL_UNAVAILABLE`.
 
 ## Installation
 
+`react-native-nitro-modules` is a peer dependency; install it next to the package.
+
+React Native:
+
 ```sh
-npx expo install munim-metalkit
+npm install munim-metalkit react-native-nitro-modules
+cd ios && pod install
+```
+
+Expo (no config plugin needed; the module is autolinked during prebuild):
+
+```sh
+npx expo install munim-metalkit react-native-nitro-modules
 npx expo prebuild   # or use a development build; Expo Go does not include this module
 ```
 
@@ -232,13 +245,28 @@ buffer/texture round trips including Private storage, error paths, a screenshot,
 MUNIM_METALKIT_SELFTEST {"platform":"ios","passed":17,"failed":0,"checks":{...}}
 ```
 
+The example is an npm workspace of the repository and uses the package from the repository root:
+
 ```sh
+npm install                 # at the repository root
 cd example
-npm install
 npx expo run:ios            # simulator
 npx expo run:ios --device   # device (signing team is set in app.json)
 npx expo run:android        # checks that every call rejects with ERR_METAL_UNAVAILABLE
 ```
+
+## Upgrading from 2.x
+
+3.x moves the native code from an Expo module (`expo-modules-core`) to Nitro Modules. The
+JavaScript API is unchanged: the same exports, types, methods, props, events and error codes.
+
+- Install the peer dependency `react-native-nitro-modules` (see [Installation](#installation)).
+  `expo` is no longer a peer dependency; Expo apps keep working through prebuild autolinking.
+- Rebuild the native app (`pod install` / `npx expo prebuild`).
+- The default export is no longer an Expo `NativeModule` instance. It never emitted events; its
+  `addListener`/`removeListener`/`removeAllListeners`/`emit`/`listenerCount` remain as no-ops.
+- A `MunimMetalkitView` ref exposes `takeScreenshot()` and `renderFrame()` (the documented
+  `MunimMetalkitViewRef`). On Android these now exist and reject with `ERR_METAL_UNAVAILABLE`.
 
 ## Migrating from 1.x
 

@@ -16,6 +16,7 @@ export default function MunimMetalkitView(props: MunimMetalkitViewProps) {
       },
     });
     // Report once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return <View style={style} />;

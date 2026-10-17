@@ -4,29 +4,23 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
+    "prebuild": "expo prebuild",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
-    "expo": "~57.0.26",
-    "expo-build-properties": "~57.0.22",
-    "expo-file-system": "~57.0.7",
-    "expo-status-bar": "~57.0.1",
-    "react": "19.2.3",
-    "react-native": "0.86.3"
+    "expo": "~58.0.14",
+    "expo-file-system": "~58.0.9",
+    "expo-status-bar": "~58.0.3",
+    "munim-metalkit": "file:..",
+    "react": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-nitro-modules": "0.37.1"
   },
   "devDependencies": {
-    "@types/react": "~19.2.2",
+    "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
   },
-  "private": true,
-  "expo": {
-    "autolinking": {
-      "nativeModulesDir": ".."
-    }
-  },
-  "overrides": {
-    "uuid": "^11.1.1"
-  }
+  "private": true
 }

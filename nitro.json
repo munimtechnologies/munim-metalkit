@@ -1,0 +1,40 @@
+{
+  "$schema": "https://nitro.margelo.com/nitro.schema.json",
+  "cxxNamespace": [
+    "munimmetalkit"
+  ],
+  "ios": {
+    "iosModuleName": "MunimMetalkit"
+  },
+  "android": {
+    "androidNamespace": [
+      "munimmetalkit"
+    ],
+    "androidCxxLibName": "MunimMetalkit"
+  },
+  "autolinking": {
+    "MunimMetalkit": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridMunimMetalkit"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridMunimMetalkit"
+      }
+    },
+    "MunimMetalkitView": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridMunimMetalkitView"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridMunimMetalkitView"
+      }
+    }
+  },
+  "ignorePaths": [
+    "**/node_modules"
+  ]
+}

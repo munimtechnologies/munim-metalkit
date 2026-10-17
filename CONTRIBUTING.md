@@ -45,35 +45,30 @@ This project follows a code of conduct that we expect all contributors to follow
 git clone https://github.com/your-username/munim-metalkit.git
 cd munim-metalkit
 
-# Install dependencies
+# Install dependencies (the example app is an npm workspace, so this installs it too)
 npm install
-
-# Install example app dependencies
-cd example
-npm install
-cd ..
 ```
 
 ### Building
 
 ```bash
-# Build the package
-npm run build
+# Regenerate the Nitro bindings after changing src/specs/*.nitro.ts
+npm run codegen
 
-# Build example app
-cd example
+# Typecheck, lint and build the package (lib/)
+npm run typecheck
+npm run lint
 npm run build
 ```
 
 ### Running Tests
 
-```bash
-# Run unit tests
-npm test
+The example app runs a self-test on launch and logs `MUNIM_METALKIT_SELFTEST {...}`.
 
-# Run example app
+```bash
 cd example
-npm start
+npx expo run:ios --device
+npx expo run:android
 ```
 
 ## Contributing Guidelines

@@ -1,0 +1,21 @@
+{
+  "uiViewClassName": "MunimMetalkitView",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "preferredFramesPerSecond": true,
+    "enableSetNeedsDisplay": true,
+    "paused": true,
+    "autoResizeDrawable": true,
+    "drawableSize": true,
+    "colorPixelFormat": true,
+    "depthStencilPixelFormat": true,
+    "sampleCount": true,
+    "clearColor": true,
+    "onLoad": true,
+    "onRender": true,
+    "onError": true,
+    "hybridRef": true
+  }
+}
