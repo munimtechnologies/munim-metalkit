@@ -452,7 +452,7 @@ final class MetalHostView: UIView {
     if scaledColor == nil {
       let descriptor = MTLTextureDescriptor.texture2DDescriptor(
         pixelFormat: format, width: width, height: height, mipmapped: false)
-      descriptor.usage = [.renderTarget, .shaderRead].union(upscaler.colorTextureUsage)
+      descriptor.usage = MTLTextureUsage([.renderTarget, .shaderRead]).union(upscaler.colorTextureUsage)
       descriptor.storageMode = .private
       scaledColor = device.makeTexture(descriptor: descriptor)
     }

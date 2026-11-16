@@ -107,6 +107,14 @@ final class SpatialUpscaler {
   /// Usage the low-resolution color texture needs.
   var colorTextureUsage: MTLTextureUsage { scaler.colorTextureUsage }
   #else
+  private init() {
+    inputWidth = 0
+    inputHeight = 0
+    outputWidth = 0
+    outputHeight = 0
+    pixelFormat = .invalid
+  }
+
   var colorTextureUsage: MTLTextureUsage { .shaderRead }
   #endif
 
