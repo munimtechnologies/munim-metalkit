@@ -10,7 +10,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "typecheck:example": "tsc --noEmit -p example/tsconfig.json",
-    "lint": "eslint src test example/App.tsx example/selftest.ts example/index.ts scripts eslint.config.js release.config.cjs --max-warnings 0",
+    "lint": "eslint src test example scripts eslint.config.js release.config.cjs --max-warnings 0",
     "test": "jest",
     "build": "npm run typecheck && bob build",
     "clean": "rm -rf lib android/build android/.cxx",
