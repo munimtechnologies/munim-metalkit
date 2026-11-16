@@ -150,6 +150,7 @@ final class MetalHostView: UIView {
   private var reportedErrors = Set<String>()
 
   private var upscaler: SpatialUpscaler?
+  private var failedUpscalerKey: String?
   private var scaledColor: MTLTexture?
   private var scaledDepth: MTLTexture?
 
@@ -436,13 +437,20 @@ final class MetalHostView: UIView {
     let output = (drawableWidth, drawableHeight)
 
     if upscaler?.matches(input: (width, height), output: output, pixelFormat: format) != true {
+      // Do not retry a configuration MetalFX already refused on every frame.
+      let key = "\(width)x\(height)->\(output.0)x\(output.1)-\(format.rawValue)"
+      if key == failedUpscalerKey {
+        return nil
+      }
       scaledColor = nil
       scaledDepth = nil
       switch SpatialUpscaler.make(device: device, input: (width, height), output: output, pixelFormat: format) {
       case .success(let made):
         upscaler = made
+        failedUpscalerKey = nil
       case .failure(let error):
         upscaler = nil
+        failedUpscalerKey = key
         emitErrorOnce(error)
         return nil
       }
