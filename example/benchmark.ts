@@ -72,9 +72,7 @@ export async function runBenchmark(): Promise<BenchmarkResult> {
     library,
     "bench_add_one",
   );
-  const data = await MunimMetalkit.createBufferWithData(
-    new Float32Array(1024),
-  );
+  const data = await MunimMetalkit.createBufferWithData(new Float32Array(1024));
   try {
     let start = performance.now();
     for (let i = 0; i < DISPATCHES; i++) {

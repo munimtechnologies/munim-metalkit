@@ -408,7 +408,8 @@ export async function runSelfTest(
       const copy = new Uint32Array(
         await MunimMetalkit.getBufferContents(buffer.id),
       );
-      if (copy[0] !== 0xdeadbeef) throw new Error("native read missed the write");
+      if (copy[0] !== 0xdeadbeef)
+        throw new Error("native read missed the write");
       // ... and a native write is visible through the mapping, without another call.
       await MunimMetalkit.updateBuffer(buffer.id, new Uint32Array([77]), 12);
       if (mapped[3] !== 77) throw new Error(`mapping shows ${mapped[3]}`);
@@ -464,7 +465,9 @@ export async function runSelfTest(
       const output = new Float32Array(MunimMetalkit.mapBuffer(outBuffer.id));
       const bad = output.findIndex((value, i) => value !== input[i]! * 2 + 5);
       if (bad !== -1) {
-        throw new Error(`index ${bad}: ${output[bad]} != ${input[bad]! * 2 + 5}`);
+        throw new Error(
+          `index ${bad}: ${output[bad]} != ${input[bad]! * 2 + 5}`,
+        );
       }
       if (result.dispatchCount !== 6) {
         throw new Error(`dispatchCount ${result.dispatchCount}`);
@@ -524,23 +527,27 @@ export async function runSelfTest(
     return `${shot.width}x${shot.height}, ${Math.round((shot.base64.length * 3) / 4 / 1024)} KB PNG`;
   });
 
-  await check("custom view: per-frame compute + uniforms, no JS per frame", async () => {
-    const custom = await getCustomView();
-    if (!custom) throw new Error("custom view did not load");
-    const { probe, tint } = custom.resources;
-    // Written through mapped memory: no native call. The next frame snapshots it.
-    tint[0] = 0.25;
-    await sleep(300);
-    const first = probe[0]!;
-    if (probe[3] !== PROBE_MAGIC) throw new Error(`probe magic ${probe[3]}`);
-    const tintSeen = new Float32Array(new Uint32Array([probe[1]!]).buffer)[0];
-    if (tintSeen !== 0.25) throw new Error(`kernel saw tint ${tintSeen}`);
-    await sleep(300);
-    const second = probe[0]!;
-    if (!(second > first)) throw new Error(`frameIndex ${first} -> ${second}`);
-    tint[0] = 1;
-    return `frames ${first} -> ${second} in 300 ms, render width ${probe[2]}`;
-  });
+  await check(
+    "custom view: per-frame compute + uniforms, no JS per frame",
+    async () => {
+      const custom = await getCustomView();
+      if (!custom) throw new Error("custom view did not load");
+      const { probe, tint } = custom.resources;
+      // Written through mapped memory: no native call. The next frame snapshots it.
+      tint[0] = 0.25;
+      await sleep(300);
+      const first = probe[0]!;
+      if (probe[3] !== PROBE_MAGIC) throw new Error(`probe magic ${probe[3]}`);
+      const tintSeen = new Float32Array(new Uint32Array([probe[1]!]).buffer)[0];
+      if (tintSeen !== 0.25) throw new Error(`kernel saw tint ${tintSeen}`);
+      await sleep(300);
+      const second = probe[0]!;
+      if (!(second > first))
+        throw new Error(`frameIndex ${first} -> ${second}`);
+      tint[0] = 1;
+      return `frames ${first} -> ${second} in 300 ms, render width ${probe[2]}`;
+    },
+  );
 
   await check("custom view screenshot", async () => {
     const custom = await getCustomView();

@@ -116,12 +116,10 @@ export default function App() {
   );
   const getCustomView = useCallback(
     () =>
-      within(
-        customLoaded.current!.promise,
-        (): CustomViewHandle | null =>
-          customRef.current && customResources.current
-            ? { ref: customRef.current, resources: customResources.current }
-            : null,
+      within(customLoaded.current!.promise, (): CustomViewHandle | null =>
+        customRef.current && customResources.current
+          ? { ref: customRef.current, resources: customResources.current }
+          : null,
       ),
     [],
   );
@@ -222,9 +220,7 @@ export default function App() {
                 )
               }
               onError={(e) =>
-                setCustomStatus(
-                  `${e.nativeEvent.code}: ${e.nativeEvent.error}`,
-                )
+                setCustomStatus(`${e.nativeEvent.code}: ${e.nativeEvent.error}`)
               }
             />
           )}
@@ -268,8 +264,12 @@ export default function App() {
 
         {artifacts.texturePixels && (
           <>
-            <Text style={styles.section}>Texture read back (first 2 texels)</Text>
-            <Text style={styles.mono}>[{artifacts.texturePixels.join(", ")}]</Text>
+            <Text style={styles.section}>
+              Texture read back (first 2 texels)
+            </Text>
+            <Text style={styles.mono}>
+              [{artifacts.texturePixels.join(", ")}]
+            </Text>
           </>
         )}
 
@@ -317,11 +317,7 @@ export default function App() {
               {result.ok ? "PASS" : "FAIL"} {name}: {result.detail}
             </Text>
           ))}
-        <Button
-          title="Run self-test again"
-          disabled={running}
-          onPress={run}
-        />
+        <Button title="Run self-test again" disabled={running} onPress={run} />
       </ScrollView>
     </View>
   );
