@@ -724,7 +724,9 @@ const MunimMetalkit = {
     ),
   dispatchComputeBatch: (steps: ComputeStep[]) =>
     call(async () =>
-      toBatchResult(await native.dispatchComputeBatch(steps.map(toComputeStep))),
+      toBatchResult(
+        await native.dispatchComputeBatch(steps.map(toComputeStep)),
+      ),
     ),
   createRenderPipelineState: (descriptor: ShaderDescriptor) =>
     call(async () =>

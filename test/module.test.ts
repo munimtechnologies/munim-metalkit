@@ -24,12 +24,12 @@ describe("MunimMetalkit module", () => {
 
   it("exposes every async method on native and web", () => {
     for (const name of ASYNC_METHOD_NAMES) {
-      expect(typeof (MunimMetalkit as unknown as Record<string, unknown>)[name]).toBe(
-        "function",
-      );
-      expect(typeof (WebModule as unknown as Record<string, unknown>)[name]).toBe(
-        "function",
-      );
+      expect(
+        typeof (MunimMetalkit as unknown as Record<string, unknown>)[name],
+      ).toBe("function");
+      expect(
+        typeof (WebModule as unknown as Record<string, unknown>)[name],
+      ).toBe("function");
     }
     expect(typeof MunimMetalkit.mapBuffer).toBe("function");
     expect(typeof WebModule.mapBuffer).toBe("function");

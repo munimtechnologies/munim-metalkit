@@ -32,7 +32,9 @@ type NativeViewRef = HybridRef<MetalViewProps, MetalViewMethods>;
 const warned = new Set<string>();
 
 /** Drops the props `toNativeViewProps` converts and the unimplemented 1.x ones. */
-function omitViewProps(props: Record<string, unknown>): Record<string, unknown> {
+function omitViewProps(
+  props: Record<string, unknown>,
+): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(props)) {
     if (!VIEW_PROP_NAMES.has(key) && key !== "onAnimationComplete") {
@@ -56,16 +58,8 @@ const MunimMetalkitView = React.forwardRef<
   MunimMetalkitViewRef,
   MunimMetalkitViewProps
 >(function MunimMetalkitViewImpl(props, ref) {
-  const {
-    style,
-    scene,
-    camera,
-    lighting,
-    onLoad,
-    onRender,
-    onError,
-    ...rest
-  } = props;
+  const { style, scene, camera, lighting, onLoad, onRender, onError, ...rest } =
+    props;
   // Metal props are converted (structured sizes/colors -> arrays); any other prop (testID,
   // accessibility, ...) is passed through as before.
   const forwarded = { ...omitViewProps(rest), ...toNativeViewProps(props) };
