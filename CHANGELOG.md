@@ -1,3 +1,29 @@
+## [3.1.0](https://github.com/munimtechnologies/munim-metalkit/compare/v3.0.0...v3.1.0) (2026-11-16)
+
+### ✨ Features
+
+* custom shaders in the view, mapBuffer, compute batches and MetalFX upscaling ([f5b9a80](https://github.com/munimtechnologies/munim-metalkit/commit/f5b9a8050d07b030530cec45dc35efaa3076397b)), references [#5](https://github.com/munimtechnologies/munim-metalkit/issues/5)
+
+### 🐛 Bug Fixes
+
+* **ios:** explicit MTLTextureUsage for the scaled render target ([60a0561](https://github.com/munimtechnologies/munim-metalkit/commit/60a05618d55c0f32387c75a302db6fe6d20ffc8e))
+
+### 💨 Performance Improvements
+
+* **ios:** do not retry a MetalFX scaler configuration that failed, every frame ([cff3611](https://github.com/munimtechnologies/munim-metalkit/commit/cff3611e21983a431003c391123d4bf31b656a10))
+
+### 📚 Documentation
+
+* custom shaders in the view, mapBuffer, compute batches, MetalFX, library comparison ([831495f](https://github.com/munimtechnologies/munim-metalkit/commit/831495f0b714a5c20e1b20075f6bb52301a97253))
+* fix the 3.0.0 changelog entry ([7d63ed8](https://github.com/munimtechnologies/munim-metalkit/commit/7d63ed81a3bb7b8bd62400138b4f4ffdf34beedc))
+
+### 🛠️ Other changes
+
+* **deps:** React Native 0.88.1, Nitro 0.37.2, Expo SDK 58.0.25, ESLint 10, semantic-release 26 ([13ba48e](https://github.com/munimtechnologies/munim-metalkit/commit/13ba48e613e3f5f76f42b8b8bd54331c47c047ff))
+* lint the whole example app ([bafd992](https://github.com/munimtechnologies/munim-metalkit/commit/bafd992ade851c4e927c587019cb485b6c93ec7a))
+* prettier on the example, lockfile peer range ([fd07d4e](https://github.com/munimtechnologies/munim-metalkit/commit/fd07d4ee2ff70a9503bdb6c4bdbdbcefcba4a42d))
+* regenerate nitrogen 0.37.2 output and lockfile, apply prettier ([744febd](https://github.com/munimtechnologies/munim-metalkit/commit/744febd466b965b73ca5c3689dca258aa2d5a116))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
