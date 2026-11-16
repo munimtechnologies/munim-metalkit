@@ -7,12 +7,12 @@
  *
  * Run after `nitrogen` (see the `codegen` script).
  */
-const path = require('node:path')
-const fs = require('node:fs')
+const path = require("node:path");
+const fs = require("node:fs");
 
-const name = 'MunimMetalkitViewConfig.json'
-const from = path.join(__dirname, '..', 'nitrogen/generated/shared/json', name)
-const to = path.join(__dirname, '..', 'src/specs', name)
+const name = "MunimMetalkitViewConfig.json";
+const from = path.join(__dirname, "..", "nitrogen/generated/shared/json", name);
+const to = path.join(__dirname, "..", "src/specs", name);
 
-fs.copyFileSync(from, to)
-console.log(`copy-view-config: ${path.relative(process.cwd(), to)}`)
+fs.copyFileSync(from, to);
+console.log(`copy-view-config: ${path.relative(process.cwd(), to)}`);

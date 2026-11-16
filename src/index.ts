@@ -4,3 +4,4 @@ export { default } from "./MunimMetalkitModule";
 export type { MunimMetalkitModule } from "./MunimMetalkitModule";
 export { default as MunimMetalkitView } from "./MunimMetalkitView";
 export * from "./MunimMetalkit.types";
+export * from "./shaderInterface";

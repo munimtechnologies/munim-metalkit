@@ -50,6 +50,15 @@ export async function call<T>(body: () => Promise<T> | T): Promise<T> {
   }
 }
 
+/** Synchronous counterpart of `call`: native throws get `error.code`. */
+export function callSync<T>(body: () => T): T {
+  try {
+    return body();
+  } catch (error) {
+    throw toMunimMetalkitError(error);
+  }
+}
+
 /** Typed arrays are sent as their viewed bytes; a whole-buffer view is passed without copying. */
 export function toArrayBuffer(data: BinaryData): ArrayBuffer {
   if (data instanceof ArrayBuffer) {

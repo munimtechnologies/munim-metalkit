@@ -5,7 +5,7 @@ buildscript {
   }
 
   dependencies {
-    classpath "com.android.tools.build:gradle:8.8.0"
+    classpath "com.android.tools.build:gradle:9.2.1"
   }
 }
 
@@ -36,14 +36,13 @@ def getExtOrIntegerDefault(name) {
 }
 
 android {
-  namespace "com.margelo.nitro.munimmetalkit"
+  namespace = "com.margelo.nitro.munimmetalkit"
 
-  ndkVersion getExtOrDefault("ndkVersion")
-  compileSdkVersion getExtOrIntegerDefault("compileSdkVersion")
+  ndkVersion = getExtOrDefault("ndkVersion")
+  compileSdk = getExtOrIntegerDefault("compileSdkVersion")
 
   defaultConfig {
-    minSdkVersion getExtOrIntegerDefault("minSdkVersion")
-    targetSdkVersion getExtOrIntegerDefault("targetSdkVersion")
+    minSdk = getExtOrIntegerDefault("minSdkVersion")
     buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
 
     externalNativeBuild {
@@ -66,55 +65,56 @@ android {
 
   externalNativeBuild {
     cmake {
-      path "CMakeLists.txt"
+      path = file("CMakeLists.txt")
     }
   }
 
   packaging {
-    def excludedFiles = [
-      "META-INF",
-      "META-INF/**",
-      "**/libc++_shared.so",
-      "**/libfbjni.so",
-      "**/libjsi.so",
-      "**/libfolly_json.so",
-      "**/libfolly_runtime.so",
-      "**/libglog.so",
-      "**/libhermes.so",
-      "**/libhermes-executor-debug.so",
-      "**/libhermes_executor.so",
-      "**/libreactnative.so",
-      "**/libreactnativejni.so",
-      "**/libturbomodulejsijni.so",
-      "**/libreact_nativemodule_core.so",
-      "**/libjscexecutor.so"
+    excludes = [
+        "META-INF",
+        "META-INF/**",
+        "**/libc++_shared.so",
+        "**/libfbjni.so",
+        "**/libjsi.so",
+        "**/libfolly_json.so",
+        "**/libfolly_runtime.so",
+        "**/libglog.so",
+        "**/libhermes.so",
+        "**/libhermes-executor-debug.so",
+        "**/libhermes_executor.so",
+        "**/libreactnative.so",
+        "**/libreactnativejni.so",
+        "**/libturbomodulejsijni.so",
+        "**/libreact_nativemodule_core.so",
+        "**/libjscexecutor.so"
     ]
-    resources {
-      excludes += excludedFiles
-    }
-    jniLibs {
-      excludes += excludedFiles
-    }
   }
 
   buildFeatures {
-    buildConfig true
-    prefab true
+    buildConfig = true
+    prefab = true
   }
 
   buildTypes {
     release {
-      minifyEnabled false
+      minifyEnabled = false
     }
   }
 
+  // defaultConfig.targetSdk is deprecated for libraries (the app's targetSdk
+  // is the one Android uses); lint and instrumentation tests still need one.
   lint {
-    disable "GradleCompatible"
+    targetSdk = getExtOrIntegerDefault("targetSdkVersion")
+    disable.add("GradleCompatible")
+  }
+
+  testOptions {
+    targetSdk = getExtOrIntegerDefault("targetSdkVersion")
   }
 
   compileOptions {
-    sourceCompatibility JavaVersion.VERSION_17
-    targetCompatibility JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
   }
 
   sourceSets {
@@ -122,7 +122,7 @@ android {
       if (isNewArchitectureEnabled()) {
         java.srcDirs += [
           // React Codegen files
-          "${project.buildDir}/generated/source/codegen/java"
+          layout.buildDirectory.dir("generated/source/codegen/java").get().asFile
         ]
       }
     }
@@ -143,6 +143,7 @@ dependencies {
 
   // Add a dependency on NitroModules
   implementation project(":react-native-nitro-modules")
+
 }
 
 if (isNewArchitectureEnabled()) {

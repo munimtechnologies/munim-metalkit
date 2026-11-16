@@ -13,6 +13,7 @@ final class HybridMunimMetalkitView: HybridMunimMetalkitViewSpec, @unchecked Sen
   let view: MetalHostView
 
   private var formatsDirty = false
+  private var bindingsDirty = false
 
   override init() {
     view = MainActor.assumeIsolated { MetalHostView() }
@@ -83,6 +84,52 @@ final class HybridMunimMetalkitView: HybridMunimMetalkitViewSpec, @unchecked Sen
     }
   }
 
+  // Binding props: resolved together in `afterUpdate()`, so ids that arrive in the same render
+  // (pipeline + buffers + textures) are validated as one set.
+
+  var renderPipelineId: String? {
+    didSet { bindingsDirty = true }
+  }
+
+  var vertexCount: Double? {
+    didSet { bindingsDirty = true }
+  }
+
+  var instanceCount: Double? {
+    didSet { bindingsDirty = true }
+  }
+
+  var primitiveType: String? {
+    didSet { bindingsDirty = true }
+  }
+
+  var computePipelineId: String? {
+    didSet { bindingsDirty = true }
+  }
+
+  var computeThreads: [Double]? {
+    didSet { bindingsDirty = true }
+  }
+
+  var buffers: [String]? {
+    didSet { bindingsDirty = true }
+  }
+
+  var textures: [String]? {
+    didSet { bindingsDirty = true }
+  }
+
+  var uniformBufferId: String? {
+    didSet { bindingsDirty = true }
+  }
+
+  var renderScale: Double? {
+    didSet {
+      let scale = renderScale ?? 1
+      onMain { $0.renderScale = scale }
+    }
+  }
+
   var onLoad: ((_ event: NativeLoadEvent) -> Void)? {
     didSet {
       let callback = onLoad
@@ -105,15 +152,30 @@ final class HybridMunimMetalkitView: HybridMunimMetalkitViewSpec, @unchecked Sen
   }
 
   func afterUpdate() {
-    guard formatsDirty else { return }
-    formatsDirty = false
-    let color = colorPixelFormat ?? "BGRA8Unorm"
-    let depth = depthStencilPixelFormat ?? "Depth32Float"
-    let samples = Self.int(sampleCount) ?? 1
-    onMain { view in
-      view.setColorPixelFormat(color)
-      view.setDepthStencilPixelFormat(depth)
-      view.setSampleCount(samples)
+    if formatsDirty {
+      formatsDirty = false
+      let color = colorPixelFormat ?? "BGRA8Unorm"
+      let depth = depthStencilPixelFormat ?? "Depth32Float"
+      let samples = Self.int(sampleCount) ?? 1
+      onMain { view in
+        view.setColorPixelFormat(color)
+        view.setDepthStencilPixelFormat(depth)
+        view.setSampleCount(samples)
+      }
+    }
+    if bindingsDirty {
+      bindingsDirty = false
+      let spec = ViewBindingSpec(
+        renderPipelineId: renderPipelineId,
+        computePipelineId: computePipelineId,
+        computeThreads: computeThreads,
+        buffers: buffers ?? [],
+        textures: textures ?? [],
+        uniformBufferId: uniformBufferId,
+        vertexCount: vertexCount,
+        instanceCount: instanceCount,
+        primitiveType: primitiveType)
+      onMain { $0.applyBindings(spec) }
     }
   }
 

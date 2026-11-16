@@ -57,6 +57,8 @@ class HybridMunimMetalkit : HybridMunimMetalkitSpec() {
 
   override fun getBufferContents(bufferId: String): Promise<ArrayBuffer> = unavailable("getBufferContents")
 
+  override fun mapBuffer(bufferId: String): ArrayBuffer = throw MetalUnavailableException("mapBuffer")
+
   override fun releaseBuffer(bufferId: String): Promise<Unit> = unavailable("releaseBuffer")
 
   override fun createShaderLibrary(source: String): Promise<String> = unavailable("createShaderLibrary")
@@ -80,6 +82,9 @@ class HybridMunimMetalkit : HybridMunimMetalkitSpec() {
     threadgroups: NativeThreadSize,
     options: NativeDispatchOptions?
   ): Promise<NativeComputeDispatchResult> = unavailable("dispatchCompute")
+
+  override fun dispatchComputeBatch(steps: Array<NativeComputeStep>): Promise<NativeComputeBatchResult> =
+    unavailable("dispatchComputeBatch")
 
   override fun createRenderPipelineState(
     descriptor: NativeRenderPipelineDescriptor

@@ -29,6 +29,12 @@ const MunimMetalkit = {
   listenerCount: () => 0,
 
   isMetalAvailable: () => false,
+  mapBuffer: () => {
+    throw makeError(
+      "ERR_METAL_UNAVAILABLE",
+      "munim-metalkit: mapBuffer() is unavailable on web. Metal is only available on iOS.",
+    );
+  },
 } as unknown as MunimMetalkitModule;
 
 export default MunimMetalkit;

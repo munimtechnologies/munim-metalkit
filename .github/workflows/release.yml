@@ -1,0 +1,52 @@
+name: Release
+
+# Manual only: run it from the Actions tab on master. semantic-release computes the next version
+# from the conventional commits since the last v* tag (v3.0.0), updates CHANGELOG.md and
+# package.json, tags, creates the GitHub release and publishes to npm.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # semantic-release 26 needs Node >= 26.13.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
+      - run: npm run codegen
+      - name: Generated bindings are committed
+        run: git diff --exit-code -- nitrogen src/specs
+      - run: npm run build
+      - run: npm run typecheck:example
+      - run: npm test
+      - name: Release to GitHub and npm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Trusted publishing (OIDC) is used when no token is configured.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+          GIT_AUTHOR_NAME: ${{ github.actor }}
+          GIT_AUTHOR_EMAIL: ${{ github.actor }}@users.noreply.github.com
+          GIT_COMMITTER_NAME: ${{ github.actor }}
+          GIT_COMMITTER_EMAIL: ${{ github.actor }}@users.noreply.github.com
+        run: npm run release
