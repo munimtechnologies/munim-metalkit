@@ -14,7 +14,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sheehanmunim.munimmetalkitexample",
-      "appleTeamId": "6T5J6U2UVT"
+      "appleTeamId": "6T5J6U2UVT",
+      "infoPlist": {
+        "CADisableMinimumFrameDurationOnPhone": true
+      }
     },
     "android": {
       "adaptiveIcon": {

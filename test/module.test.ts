@@ -1,23 +1,33 @@
-const mockNative = {
-  isMetalAvailable: jest.fn(() => true),
-  mapBuffer: jest.fn(),
-  dispatchComputeBatch: jest.fn(),
-  getMetalCapabilities: jest.fn(),
-  updateBuffer: jest.fn(),
-};
-
-jest.mock("react-native", () => ({ Platform: { OS: "ios" } }), {
-  virtual: true,
-});
-jest.mock(
-  "react-native-nitro-modules",
-  () => ({ NitroModules: { createHybridObject: () => mockNative } }),
-  { virtual: true },
-);
-
 import MunimMetalkit from "../src/MunimMetalkitModule";
 import WebModule from "../src/MunimMetalkitModule.web";
 import { ASYNC_METHOD_NAMES } from "../src/methodNames";
+
+// jest.mock calls are hoisted above the imports, so the fake HybridObject is created inside the
+// factory and read back through jest.requireMock.
+jest.mock("react-native", () => ({ Platform: { OS: "ios" } }));
+jest.mock("react-native-nitro-modules", () => {
+  const native = {
+    isMetalAvailable: jest.fn(() => true),
+    mapBuffer: jest.fn(),
+    dispatchComputeBatch: jest.fn(),
+    getMetalCapabilities: jest.fn(),
+    updateBuffer: jest.fn(),
+  };
+  return { NitroModules: { createHybridObject: () => native } };
+});
+
+const mockNative = jest
+  .requireMock<{
+    NitroModules: { createHybridObject: () => Record<string, jest.Mock> };
+  }>("react-native-nitro-modules")
+  .NitroModules.createHybridObject() as Record<
+  | "isMetalAvailable"
+  | "mapBuffer"
+  | "dispatchComputeBatch"
+  | "getMetalCapabilities"
+  | "updateBuffer",
+  jest.Mock
+>;
 
 describe("MunimMetalkit module", () => {
   beforeEach(() => jest.clearAllMocks());

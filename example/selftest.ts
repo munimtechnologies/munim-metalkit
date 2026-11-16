@@ -4,6 +4,8 @@ import MunimMetalkit, {
 } from "munim-metalkit";
 import { Platform } from "react-native";
 
+import { PROBE_MAGIC, type CustomShaderResources } from "./customShader";
+
 export type CheckResult = { ok: boolean; detail: string };
 export type SelfTestReport = {
   platform: string;
@@ -20,6 +22,7 @@ export type SelfTestArtifacts = {
   };
   texturePixels?: number[];
   screenshot?: Screenshot;
+  customScreenshot?: Screenshot;
 };
 
 const COMPUTE_COUNT = 1024;
@@ -34,6 +37,13 @@ kernel void double_values(device const float *input [[buffer(0)]],
                           uint id [[thread_position_in_grid]]) {
   if (id >= count) { return; }
   output[id] = input[id] * 2.0;
+}
+
+kernel void add_one(device float *data [[buffer(0)]],
+                    constant uint &count [[buffer(1)]],
+                    uint id [[thread_position_in_grid]]) {
+  if (id >= count) { return; }
+  data[id] += 1.0;
 }
 
 struct VOut { float4 position [[position]]; };
@@ -66,18 +76,39 @@ async function expectRejection(
     }
     throw new Error(
       `expected ${code}, got ${errorCode(error)}: ${String(error)}`,
+      { cause: error },
     );
   }
   throw new Error(`expected rejection with ${code}, but it resolved`);
 }
 
+function expectThrow(body: () => unknown, code: string): string {
+  try {
+    body();
+  } catch (error) {
+    if (errorCode(error) === code) return `threw ${code}`;
+    throw new Error(`expected ${code}, got ${errorCode(error)}`, {
+      cause: error,
+    });
+  }
+  throw new Error(`expected a throw with ${code}`);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+export type CustomViewHandle = {
+  ref: MunimMetalkitViewRef;
+  resources: CustomShaderResources;
+};
+
 export async function runSelfTest(
   getView: () => Promise<MunimMetalkitViewRef | null>,
   onArtifacts: (artifacts: SelfTestArtifacts) => void,
+  getCustomView: () => Promise<CustomViewHandle | null>,
 ): Promise<SelfTestReport> {
   const checks: Record<string, CheckResult> = {};
   const artifacts: SelfTestArtifacts = {};
@@ -111,6 +142,17 @@ export async function runSelfTest(
         "ERR_METAL_UNAVAILABLE",
       ),
     );
+    await check("mapBuffer throws", async () =>
+      expectThrow(() => MunimMetalkit.mapBuffer("x"), "ERR_METAL_UNAVAILABLE"),
+    );
+    await check("dispatchComputeBatch rejects", () =>
+      expectRejection(
+        MunimMetalkit.dispatchComputeBatch([
+          { pipelineId: "x", threads: { width: 1 } },
+        ]),
+        "ERR_METAL_UNAVAILABLE",
+      ),
+    );
     await check("getMetalCapabilities rejects", () =>
       expectRejection(
         MunimMetalkit.getMetalCapabilities(),
@@ -139,6 +181,11 @@ export async function runSelfTest(
       "tensors",
       "residencySets",
       "raytracing",
+      "metalFXSpatial",
+      "metalFXTemporal",
+      "metalFXFrameInterpolation",
+      "meshShaders",
+      "nonUniformThreadgroups",
     ] as const;
     const notBoolean = flags.filter((key) => typeof caps[key] !== "boolean");
     if (notBoolean.length)
@@ -157,6 +204,14 @@ export async function runSelfTest(
     }
     const major = Number(caps.osVersion.split(".")[0]);
     const appleFamily = caps.appleGPUFamily ?? 0;
+    if (caps.meshShaders !== appleFamily >= 7) {
+      throw new Error(`meshShaders ${caps.meshShaders} on apple${appleFamily}`);
+    }
+    if (caps.nonUniformThreadgroups !== appleFamily >= 4) {
+      throw new Error(
+        `nonUniformThreadgroups ${caps.nonUniformThreadgroups} on apple${appleFamily}`,
+      );
+    }
     // Metal 4 = Apple7 (A14 / M1) and newer on iOS 26+, when the binary has the probes compiled in.
     const expectMetal4 =
       caps.compiledWithMetal4SDK && major >= 26 && appleFamily >= 7;
@@ -339,6 +394,100 @@ export async function runSelfTest(
     ),
   );
 
+  await check("mapBuffer aliases the buffer's memory (zero-copy)", async () => {
+    const buffer = await MunimMetalkit.createBufferWithData(
+      new Uint32Array([1, 2, 3, 4]),
+    );
+    try {
+      const mapped = new Uint32Array(MunimMetalkit.mapBuffer(buffer.id));
+      if (mapped.length !== 4 || mapped[2] !== 3) {
+        throw new Error(`mapped [${Array.from(mapped)}]`);
+      }
+      // A write through the mapping is visible to a native read ...
+      mapped[0] = 0xdeadbeef;
+      const copy = new Uint32Array(
+        await MunimMetalkit.getBufferContents(buffer.id),
+      );
+      if (copy[0] !== 0xdeadbeef) throw new Error("native read missed the write");
+      // ... and a native write is visible through the mapping, without another call.
+      await MunimMetalkit.updateBuffer(buffer.id, new Uint32Array([77]), 12);
+      if (mapped[3] !== 77) throw new Error(`mapping shows ${mapped[3]}`);
+      return "JS writes reach Metal and Metal writes reach JS";
+    } finally {
+      await MunimMetalkit.releaseBuffer(buffer.id);
+    }
+  });
+
+  await check("mapBuffer rejects Private buffers", async () => {
+    const buffer = await MunimMetalkit.createBuffer({
+      length: 16,
+      options: "StorageModePrivate",
+    });
+    try {
+      return expectThrow(
+        () => MunimMetalkit.mapBuffer(buffer.id),
+        "ERR_INVALID_ARGUMENT",
+      );
+    } finally {
+      await MunimMetalkit.releaseBuffer(buffer.id);
+    }
+  });
+
+  await check("dispatchComputeBatch runs steps in order", async () => {
+    if (!libraryId) throw new Error("no library");
+    const count = 1000; // not a multiple of the threadgroup size
+    const [double, addOne] = await Promise.all([
+      MunimMetalkit.createComputePipelineState(libraryId, "double_values"),
+      MunimMetalkit.createComputePipelineState(libraryId, "add_one"),
+    ]);
+    const input = new Float32Array(count);
+    for (let i = 0; i < count; i++) input[i] = i - 300;
+    const [inBuffer, outBuffer, countBuffer] = await Promise.all([
+      MunimMetalkit.createBufferWithData(input),
+      MunimMetalkit.createBuffer({ length: input.byteLength }),
+      MunimMetalkit.createBufferWithData(new Uint32Array([count])),
+    ]);
+    try {
+      const result = await MunimMetalkit.dispatchComputeBatch([
+        {
+          pipelineId: double.id,
+          buffers: [inBuffer.id, outBuffer.id, countBuffer.id],
+          threads: { width: count },
+        },
+        {
+          pipelineId: addOne.id,
+          buffers: [outBuffer.id, countBuffer.id],
+          threads: { width: count },
+          repeatCount: 5,
+        },
+      ]);
+      const output = new Float32Array(MunimMetalkit.mapBuffer(outBuffer.id));
+      const bad = output.findIndex((value, i) => value !== input[i]! * 2 + 5);
+      if (bad !== -1) {
+        throw new Error(`index ${bad}: ${output[bad]} != ${input[bad]! * 2 + 5}`);
+      }
+      if (result.dispatchCount !== 6) {
+        throw new Error(`dispatchCount ${result.dispatchCount}`);
+      }
+      return `6 dispatches, one submission, gpu ${result.gpuTimeMs?.toFixed(3)} ms`;
+    } finally {
+      await Promise.all([
+        MunimMetalkit.releaseBuffer(inBuffer.id),
+        MunimMetalkit.releaseBuffer(outBuffer.id),
+        MunimMetalkit.releaseBuffer(countBuffer.id),
+        MunimMetalkit.releaseComputePipelineState(double.id),
+        MunimMetalkit.releaseComputePipelineState(addOne.id),
+      ]);
+    }
+  });
+
+  await check("dispatchComputeBatch validates steps", () =>
+    expectRejection(
+      MunimMetalkit.dispatchComputeBatch([{ pipelineId: "missing" }]),
+      "ERR_INVALID_ARGUMENT",
+    ),
+  );
+
   await check("unimplemented APIs reject loudly", async () => {
     await expectRejection(
       MunimMetalkit.createMesh({
@@ -373,6 +522,36 @@ export async function runSelfTest(
     if (!file.uri?.startsWith("file://"))
       throw new Error("file screenshot has no uri");
     return `${shot.width}x${shot.height}, ${Math.round((shot.base64.length * 3) / 4 / 1024)} KB PNG`;
+  });
+
+  await check("custom view: per-frame compute + uniforms, no JS per frame", async () => {
+    const custom = await getCustomView();
+    if (!custom) throw new Error("custom view did not load");
+    const { probe, tint } = custom.resources;
+    // Written through mapped memory: no native call. The next frame snapshots it.
+    tint[0] = 0.25;
+    await sleep(300);
+    const first = probe[0]!;
+    if (probe[3] !== PROBE_MAGIC) throw new Error(`probe magic ${probe[3]}`);
+    const tintSeen = new Float32Array(new Uint32Array([probe[1]!]).buffer)[0];
+    if (tintSeen !== 0.25) throw new Error(`kernel saw tint ${tintSeen}`);
+    await sleep(300);
+    const second = probe[0]!;
+    if (!(second > first)) throw new Error(`frameIndex ${first} -> ${second}`);
+    tint[0] = 1;
+    return `frames ${first} -> ${second} in 300 ms, render width ${probe[2]}`;
+  });
+
+  await check("custom view screenshot", async () => {
+    const custom = await getCustomView();
+    if (!custom) throw new Error("custom view did not load");
+    const shot = await custom.ref.takeScreenshot();
+    if (!shot.base64?.startsWith("iVBORw0KGgo")) throw new Error("not a PNG");
+    if (shot.base64.length < 2000) {
+      throw new Error(`PNG suspiciously small (${shot.base64.length} chars)`);
+    }
+    artifacts.customScreenshot = shot;
+    return `${shot.width}x${shot.height}`;
   });
 
   await check("getPerformanceInfo reports real data", async () => {
