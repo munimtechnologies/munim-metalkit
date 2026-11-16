@@ -1,0 +1,54 @@
+name: Build Android
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/android-build.yml'
+      - 'android/**'
+      - 'example/**'
+      - 'nitrogen/**'
+      - 'src/**'
+      - 'nitro.json'
+      - 'package*.json'
+  pull_request:
+    paths:
+      - '.github/workflows/android-build.yml'
+      - 'android/**'
+      - 'example/**'
+      - 'nitrogen/**'
+      - 'src/**'
+      - 'nitro.json'
+      - 'package*.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Android Example App
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: 17
+          cache: gradle
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Expo prebuild
+        run: npx expo prebuild --clean --platform android --no-install
+        working-directory: example
+      - name: Build Android example
+        run: ./gradlew :app:assembleDebug --no-daemon --build-cache
+        working-directory: example/android
