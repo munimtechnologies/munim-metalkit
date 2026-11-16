@@ -21,6 +21,7 @@ const IMPLEMENTED_ASYNC_METHOD_NAMES = [
   "createComputePipelineState",
   "releaseComputePipelineState",
   "dispatchCompute",
+  "dispatchComputeBatch",
   "createRenderPipelineState",
   "releaseRenderPipelineState",
   "startRendering",

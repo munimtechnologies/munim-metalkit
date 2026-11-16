@@ -37,6 +37,16 @@ class HybridMunimMetalkitView(context: ThemedReactContext) : HybridMunimMetalkit
   override var depthStencilPixelFormat: String? = null
   override var sampleCount: Double? = null
   override var clearColor: DoubleArray? = null
+  override var renderPipelineId: String? = null
+  override var vertexCount: Double? = null
+  override var instanceCount: Double? = null
+  override var primitiveType: String? = null
+  override var computePipelineId: String? = null
+  override var computeThreads: DoubleArray? = null
+  override var buffers: Array<String>? = null
+  override var textures: Array<String>? = null
+  override var uniformBufferId: String? = null
+  override var renderScale: Double? = null
   override var onLoad: ((event: NativeLoadEvent) -> Unit)? = null
   override var onRender: ((event: NativeFrameStats) -> Unit)? = null
   override var onError: ((event: NativeErrorEvent) -> Unit)? = null

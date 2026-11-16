@@ -52,6 +52,11 @@ enum MetalCapabilityProbe {
       tensors: flag("tensors"),
       residencySets: flag("residencySets"),
       raytracing: flag("raytracing"),
+      metalFXSpatial: flag("metalFXSpatial"),
+      metalFXTemporal: flag("metalFXTemporal"),
+      metalFXFrameInterpolation: flag("metalFXFrameInterpolation"),
+      meshShaders: flag("meshShaders"),
+      nonUniformThreadgroups: flag("nonUniformThreadgroups"),
       unsupportedReason: report["unsupportedReason"] as? String)
   }
 
@@ -79,6 +84,13 @@ enum MetalCapabilityProbe {
       "tensors": false,
       "residencySets": false,
       "raytracing": device.supportsRaytracing,
+      "metalFXSpatial": MetalFXSupport.spatial(device),
+      "metalFXTemporal": MetalFXSupport.temporal(device),
+      "metalFXFrameInterpolation": MetalFXSupport.frameInterpolation(device),
+      // Mesh shaders (object/mesh stages) need an Apple7 (A14 / M1) or newer GPU.
+      "meshShaders": GPUFamilies.appleFamily(7).map { device.supportsFamily($0) } ?? false,
+      // dispatchThreads with non-uniform threadgroups: Apple4 (A11) and newer.
+      "nonUniformThreadgroups": GPUFamilies.appleFamily(4).map { device.supportsFamily($0) } ?? false,
     ]
     var reasons: [String] = []
 

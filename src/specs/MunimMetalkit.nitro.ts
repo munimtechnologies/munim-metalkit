@@ -47,6 +47,11 @@ export interface NativeMetalCapabilities {
   tensors: boolean;
   residencySets: boolean;
   raytracing: boolean;
+  metalFXSpatial: boolean;
+  metalFXTemporal: boolean;
+  metalFXFrameInterpolation: boolean;
+  meshShaders: boolean;
+  nonUniformThreadgroups: boolean;
   unsupportedReason?: string;
 }
 
@@ -122,6 +127,22 @@ export interface NativeComputeDispatchResult {
   cpuTimeMs: number;
   threadgroups: NativeSize;
   threadsPerThreadgroup: NativeSize;
+}
+
+export interface NativeComputeStep {
+  pipelineId: string;
+  buffers?: string[];
+  textures?: string[];
+  threadgroups?: NativeThreadSize;
+  threads?: NativeThreadSize;
+  threadsPerThreadgroup?: NativeThreadSize;
+  repeatCount?: number;
+}
+
+export interface NativeComputeBatchResult {
+  gpuTimeMs?: number;
+  cpuTimeMs: number;
+  dispatchCount: number;
 }
 
 export interface NativeColorAttachment {
@@ -248,6 +269,8 @@ export interface MunimMetalkit extends HybridObject<{
     offset?: number,
   ): Promise<void>;
   getBufferContents(bufferId: string): Promise<ArrayBuffer>;
+  /** Zero-copy view of a Shared buffer's memory (keeps the buffer alive until collected). */
+  mapBuffer(bufferId: string): ArrayBuffer;
   releaseBuffer(bufferId: string): Promise<void>;
 
   // Shaders and pipelines
@@ -265,6 +288,10 @@ export interface MunimMetalkit extends HybridObject<{
     threadgroups: NativeThreadSize,
     options?: NativeDispatchOptions,
   ): Promise<NativeComputeDispatchResult>;
+  /** Encodes every step (and repeat) into one command buffer and waits once. */
+  dispatchComputeBatch(
+    steps: NativeComputeStep[],
+  ): Promise<NativeComputeBatchResult>;
   createRenderPipelineState(
     descriptor: NativeRenderPipelineDescriptor,
   ): Promise<NativeRenderPipelineState>;

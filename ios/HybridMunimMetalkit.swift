@@ -11,22 +11,22 @@ import QuartzCore
 /// View-control methods run on the main thread. Errors carry a `[ERR_...]` code prefix that the
 /// TypeScript wrapper turns into `error.code`.
 ///
-/// `@unchecked Sendable`: every stored property is an immutable reference to a lock-protected
-/// registry or to the thread-safe MTLDevice/MTLCommandQueue holder.
+/// `@unchecked Sendable`: every stored property is an immutable reference to the lock-protected
+/// `MetalStore` or to the thread-safe MTLDevice/MTLCommandQueue holder.
 final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
   private let context = MetalContext.shared
-  private let textures = ResourceRegistry<MTLTexture>(kind: "texture")
-  private let buffers = ResourceRegistry<MTLBuffer>(kind: "buffer")
-  private let libraries = ResourceRegistry<MTLLibrary>(kind: "shader library")
-  private let computePipelines = ResourceRegistry<MTLComputePipelineState>(kind: "compute pipeline")
-  private let renderPipelines = ResourceRegistry<MTLRenderPipelineState>(kind: "render pipeline")
+  private let store = MetalStore.shared
+  private var textures: ResourceRegistry<MTLTexture> { store.textures }
+  private var buffers: ResourceRegistry<MTLBuffer> { store.buffers }
+  private var libraries: ResourceRegistry<MTLLibrary> { store.libraries }
+  private var computePipelines: ResourceRegistry<MTLComputePipelineState> { store.computePipelines }
+  private var renderPipelines: ResourceRegistry<RenderPipelineEntry> { store.renderPipelines }
+  /// Resources are tagged with the instance that created them (see `ResourceRegistry`).
+  private var owner: ObjectIdentifier { ObjectIdentifier(self) }
 
   deinit {
-    textures.removeAll()
-    buffers.removeAll()
-    libraries.removeAll()
-    computePipelines.removeAll()
-    renderPipelines.removeAll()
+    // Views keep strong references to whatever they bound, so they keep drawing.
+    store.removeAll(owner: ObjectIdentifier(self))
   }
 
   // MARK: Device
@@ -63,7 +63,7 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
   func createTexture(descriptor: NativeTextureDescriptor) throws -> Promise<NativeTexture> {
     return runAsync {
       let texture = try self.makeTexture(try TextureDescriptorRecord(descriptor))
-      return self.textureInfo(texture, id: self.textures.insert(texture))
+      return self.textureInfo(texture, id: self.textures.insert(texture, owner: self.owner))
     }
   }
 
@@ -86,7 +86,7 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
           data = downloaded
         }
         let texture = try self.loadTexture(data: data, options: loadOptions)
-        promise.resolve(withResult: self.textureInfo(texture, id: self.textures.insert(texture)))
+        promise.resolve(withResult: self.textureInfo(texture, id: self.textures.insert(texture, owner: self.owner)))
       } catch {
         promise.reject(withError: MetalKitError.wrap(error))
       }
@@ -102,13 +102,29 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
         throw MetalKitError.invalidArgument("loadTextureFromData: data is empty.")
       }
       let texture = try self.loadTexture(data: bytes, options: loadOptions)
-      return self.textureInfo(texture, id: self.textures.insert(texture))
+      return self.textureInfo(texture, id: self.textures.insert(texture, owner: self.owner))
     }
   }
 
   func updateTexture(
     textureId: String, data: ArrayBuffer, region: NativeTextureRegion?, options: NativeTextureTransferOptions?
   ) throws -> Promise<Void> {
+    // Shared textures: one copy, straight from the JavaScript ArrayBuffer into the texture, while
+    // the borrowed ArrayBuffer is still valid (no intermediate Data copy and no thread hop).
+    if let texture = try? textures.get(textureId), texture.storageMode != .private {
+      return settledNow {
+        let layout = try self.transferLayout(
+          texture, region: try TextureRegionRecord(region), options: try TextureTransferOptionsRecord(options))
+        guard data.size >= layout.byteCount else {
+          throw MetalKitError.invalidArgument(
+            "updateTexture needs \(layout.byteCount) bytes for this region but got \(data.size).")
+        }
+        let transfer = try TextureTransferOptionsRecord(options)
+        texture.replace(
+          region: layout.region, mipmapLevel: transfer.mipmapLevel, slice: transfer.slice,
+          withBytes: UnsafeRawPointer(data.data), bytesPerRow: layout.bytesPerRow, bytesPerImage: layout.byteCount)
+      }
+    }
     let bytes = data.toData(copyIfNeeded: true)
     return runAsync {
       let texture = try self.textures.get(textureId)
@@ -159,11 +175,28 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
       guard let buffer = device.makeBuffer(length: length, options: options) else {
         throw MetalKitError.gpu("Failed to allocate a \(length)-byte buffer.")
       }
-      return self.bufferInfo(buffer, id: self.buffers.insert(buffer))
+      return self.bufferInfo(buffer, id: self.buffers.insert(buffer, owner: self.owner))
     }
   }
 
   func createBufferWithData(data: ArrayBuffer, options optionName: String?) throws -> Promise<NativeBuffer> {
+    // Shared buffers: `makeBuffer(bytes:)` copies straight from the borrowed JavaScript memory,
+    // once, during the call. (Copying into a Data first and allocating later cost a second copy.)
+    if let options = try? MetalParsing.bufferOptions(optionName), !options.contains(.storageModePrivate) {
+      return settledNow {
+        let device = try self.context.requireDevice()
+        guard data.size > 0 else {
+          throw MetalKitError.invalidArgument("createBufferWithData: data is empty (Metal cannot create zero-length buffers).")
+        }
+        guard data.size <= device.maxBufferLength else {
+          throw MetalKitError.invalidArgument("Buffer length exceeds maxBufferLength (\(device.maxBufferLength)).")
+        }
+        guard let buffer = device.makeBuffer(bytes: UnsafeRawPointer(data.data), length: data.size, options: options) else {
+          throw MetalKitError.gpu("Failed to allocate a \(data.size)-byte buffer.")
+        }
+        return self.bufferInfo(buffer, id: self.buffers.insert(buffer, owner: self.owner))
+      }
+    }
     let bytes = data.toData(copyIfNeeded: true)
     return runAsync {
       let device = try self.context.requireDevice()
@@ -188,11 +221,18 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
         }
         buffer = made
       }
-      return self.bufferInfo(buffer, id: self.buffers.insert(buffer))
+      return self.bufferInfo(buffer, id: self.buffers.insert(buffer, owner: self.owner))
     }
   }
 
   func updateBuffer(bufferId: String, data: ArrayBuffer, offset: Double?) throws -> Promise<Void> {
+    // Shared buffers: a single memcpy from the borrowed JavaScript memory into `contents()`.
+    if let buffer = try? buffers.get(bufferId), buffer.storageMode != .private {
+      return settledNow {
+        try self.writeShared(
+          buffer, from: UnsafeRawPointer(data.data), count: data.size, offset: try intArg(offset, "offset", default: 0))
+      }
+    }
     let bytes = data.toData(copyIfNeeded: true)
     return runAsync {
       let buffer = try self.buffers.get(bufferId)
@@ -204,6 +244,20 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
     return runAsync {
       let buffer = try self.buffers.get(bufferId)
       return try self.readBuffer(buffer)
+    }
+  }
+
+  func mapBuffer(bufferId: String) throws -> ArrayBuffer {
+    let buffer = try buffers.get(bufferId)
+    guard buffer.storageMode != .private else {
+      throw MetalKitError.invalidArgument(
+        "mapBuffer: Private buffers have no CPU-visible memory. Create the buffer with 'StorageModeShared'.")
+    }
+    // The ArrayBuffer aliases the MTLBuffer's memory; the closure keeps the buffer alive until
+    // JavaScript garbage-collects the ArrayBuffer, even if the id is released earlier.
+    let retained = UncheckedSendable(buffer)
+    return ArrayBuffer.wrap(dataWithoutCopy: buffer.contents(), size: buffer.length) {
+      withExtendedLifetime(retained) {}
     }
   }
 
@@ -220,7 +274,7 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
       let device = try self.context.requireDevice()
       do {
         let library = try device.makeLibrary(source: source, options: nil)
-        return self.libraries.insert(library)
+        return self.libraries.insert(library, owner: self.owner)
       } catch {
         throw MetalKitError.make("ERR_SHADER_COMPILATION", "Metal shader compilation failed:\n\(error.localizedDescription)")
       }
@@ -253,7 +307,7 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
         throw MetalKitError.gpu("Failed to create compute pipeline: \(error.localizedDescription)")
       }
       return NativeComputePipelineState(
-        id: self.computePipelines.insert(pipeline),
+        id: self.computePipelines.insert(pipeline, owner: self.owner),
         functionName: functionName,
         threadExecutionWidth: Double(pipeline.threadExecutionWidth),
         maxTotalThreadsPerThreadgroup: Double(pipeline.maxTotalThreadsPerThreadgroup))
@@ -269,11 +323,29 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
   func dispatchCompute(
     pipelineId: String, buffers bufferIds: [String], threadgroups: NativeThreadSize, options: NativeDispatchOptions?
   ) throws -> Promise<NativeComputeDispatchResult> {
-    return runAsync {
-      return try self.dispatchCompute(
-        pipelineId: pipelineId, bufferIds: bufferIds, threadgroups: try SizeRecord(threadgroups),
-        options: try DispatchOptionsRecord(options))
+    let promise = Promise<NativeComputeDispatchResult>()
+    metalWorkQueue.async {
+      do {
+        try self.dispatchCompute(
+          pipelineId: pipelineId, bufferIds: bufferIds, threadgroups: try SizeRecord(threadgroups),
+          options: try DispatchOptionsRecord(options), promise: promise)
+      } catch {
+        promise.reject(withError: MetalKitError.wrap(error))
+      }
     }
+    return promise
+  }
+
+  func dispatchComputeBatch(steps: [NativeComputeStep]) throws -> Promise<NativeComputeBatchResult> {
+    let promise = Promise<NativeComputeBatchResult>()
+    metalWorkQueue.async {
+      do {
+        try self.dispatchBatch(try steps.map { try ComputeStepRecord($0) }, promise: promise)
+      } catch {
+        promise.reject(withError: MetalKitError.wrap(error))
+      }
+    }
+    return promise
   }
 
   func createRenderPipelineState(descriptor: NativeRenderPipelineDescriptor) throws -> Promise<NativeRenderPipelineState> {
@@ -353,11 +425,11 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
         recommendedMaxWorkingSetSize: device.map { Double($0.recommendedMaxWorkingSetSize) },
         currentAllocatedSize: device.map { Double($0.currentAllocatedSize) },
         resourceCounts: NativeResourceCounts(
-          textures: Double(self.textures.count),
-          buffers: Double(self.buffers.count),
-          shaderLibraries: Double(self.libraries.count),
-          computePipelines: Double(self.computePipelines.count),
-          renderPipelines: Double(self.renderPipelines.count)))
+          textures: Double(self.textures.count(owner: self.owner)),
+          buffers: Double(self.buffers.count(owner: self.owner)),
+          shaderLibraries: Double(self.libraries.count(owner: self.owner)),
+          computePipelines: Double(self.computePipelines.count(owner: self.owner)),
+          renderPipelines: Double(self.renderPipelines.count(owner: self.owner))))
     }
   }
 
@@ -412,6 +484,15 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
       id: id,
       length: Double(buffer.length),
       storageMode: buffer.storageMode == .private ? "Private" : "Shared")
+  }
+
+  private func writeShared(_ buffer: MTLBuffer, from source: UnsafeRawPointer, count: Int, offset: Int) throws {
+    guard offset >= 0, offset + count <= buffer.length else {
+      throw MetalKitError.invalidArgument(
+        "Write of \(count) bytes at offset \(offset) overflows the \(buffer.length)-byte buffer.")
+    }
+    guard count > 0 else { return }
+    buffer.contents().advanced(by: offset).copyMemory(from: source, byteCount: count)
   }
 
   private func writeBuffer(_ buffer: MTLBuffer, data: Data, offset: Int) throws {
@@ -596,28 +677,33 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
     _ texture: MTLTexture, region: TextureRegionRecord, options: TextureTransferOptionsRecord
   ) throws -> ArrayBuffer {
     let layout = try transferLayout(texture, region: region, options: options)
-    let staging = try makeStagingBuffer(length: layout.byteCount)
-    if texture.storageMode == .private {
-      try runBlit {
-        $0.copy(
-          from: texture, sourceSlice: options.slice, sourceLevel: options.mipmapLevel,
-          sourceOrigin: layout.region.origin, sourceSize: layout.region.size,
-          to: staging, destinationOffset: 0, destinationBytesPerRow: layout.bytesPerRow,
-          destinationBytesPerImage: layout.byteCount)
-      }
-    } else {
+    if texture.storageMode != .private {
+      // Read straight into the ArrayBuffer handed to JavaScript (one copy, no staging buffer).
+      let result = ArrayBuffer.allocate(size: layout.byteCount)
       texture.getBytes(
-        staging.contents(), bytesPerRow: layout.bytesPerRow, bytesPerImage: layout.byteCount,
+        result.data, bytesPerRow: layout.bytesPerRow, bytesPerImage: layout.byteCount,
         from: layout.region, mipmapLevel: options.mipmapLevel, slice: options.slice)
+      return result
+    }
+    let staging = try makeStagingBuffer(length: layout.byteCount)
+    try runBlit {
+      $0.copy(
+        from: texture, sourceSlice: options.slice, sourceLevel: options.mipmapLevel,
+        sourceOrigin: layout.region.origin, sourceSize: layout.region.size,
+        to: staging, destinationOffset: 0, destinationBytesPerRow: layout.bytesPerRow,
+        destinationBytesPerImage: layout.byteCount)
     }
     return arrayBuffer(copying: staging.contents(), count: layout.byteCount)
   }
 
   // MARK: Compute
 
+  /// Encodes one dispatch and commits it. The promise settles from the command buffer's completion
+  /// handler, so no thread is blocked in `waitUntilCompleted()` while the GPU works.
   private func dispatchCompute(
-    pipelineId: String, bufferIds: [String], threadgroups: SizeRecord, options: DispatchOptionsRecord
-  ) throws -> NativeComputeDispatchResult {
+    pipelineId: String, bufferIds: [String], threadgroups: SizeRecord, options: DispatchOptionsRecord,
+    promise: Promise<NativeComputeDispatchResult>
+  ) throws {
     let queue = try context.requireQueue()
     let pipeline = try computePipelines.get(pipelineId)
     let boundBuffers = try bufferIds.map { try buffers.get($0) }
@@ -630,11 +716,7 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
     let perGroup =
       options.threadsPerThreadgroup?.mtlSize
       ?? MTLSize(width: min(pipeline.threadExecutionWidth, pipeline.maxTotalThreadsPerThreadgroup), height: 1, depth: 1)
-    let threadsPerGroup = perGroup.width * perGroup.height * perGroup.depth
-    guard threadsPerGroup > 0, threadsPerGroup <= pipeline.maxTotalThreadsPerThreadgroup else {
-      throw MetalKitError.invalidArgument(
-        "threadsPerThreadgroup (\(threadsPerGroup) threads) must be between 1 and \(pipeline.maxTotalThreadsPerThreadgroup).")
-    }
+    try validateThreadgroup(perGroup, pipeline: pipeline)
 
     guard let commandBuffer = queue.makeCommandBuffer(), let encoder = commandBuffer.makeComputeCommandEncoder() else {
       throw MetalKitError.gpu("Failed to create a compute command encoder.")
@@ -650,23 +732,116 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
     encoder.endEncoding()
 
     let cpuStart = CACurrentMediaTime()
+    commandBuffer.addCompletedHandler { buffer in
+      let cpuTime = (CACurrentMediaTime() - cpuStart) * 1000
+      if buffer.status == .error {
+        promise.reject(
+          withError: MetalKitError.gpu("Compute dispatch failed: \(buffer.error?.localizedDescription ?? "unknown error")"))
+        return
+      }
+      let gpuTime = gpuTimeMs(of: buffer)
+      if let gpuTime {
+        PerformanceStats.shared.recordCompute(gpuTimeMs: gpuTime)
+      }
+      promise.resolve(
+        withResult: NativeComputeDispatchResult(
+          gpuTimeMs: gpuTime,
+          cpuTimeMs: cpuTime,
+          threadgroups: NativeSize(width: Double(groups.width), height: Double(groups.height), depth: Double(groups.depth)),
+          threadsPerThreadgroup: NativeSize(
+            width: Double(perGroup.width), height: Double(perGroup.height), depth: Double(perGroup.depth))))
+    }
     commandBuffer.commit()
-    commandBuffer.waitUntilCompleted()
-    let cpuTime = (CACurrentMediaTime() - cpuStart) * 1000
+  }
 
-    if commandBuffer.status == .error {
-      throw MetalKitError.gpu("Compute dispatch failed: \(commandBuffer.error?.localizedDescription ?? "unknown error")")
+  private struct ResolvedComputeStep {
+    let pipeline: MTLComputePipelineState
+    let buffers: [MTLBuffer]
+    let textures: [MTLTexture]
+    let step: ComputeStepRecord
+    let group: MTLSize
+  }
+
+  /// Encodes every step (each `repeatCount` times) into one serial compute encoder in one command
+  /// buffer: one commit and one completion for the whole batch instead of a JS round trip per
+  /// dispatch. A serial encoder runs dispatches in order, so step N sees step N-1's writes.
+  private func dispatchBatch(_ steps: [ComputeStepRecord], promise: Promise<NativeComputeBatchResult>) throws {
+    guard !steps.isEmpty else {
+      throw MetalKitError.invalidArgument("dispatchComputeBatch needs at least one step.")
     }
-    let gpuTime = gpuTimeMs(of: commandBuffer)
-    if let gpuTime {
-      PerformanceStats.shared.recordCompute(gpuTimeMs: gpuTime)
+    let device = try context.requireDevice()
+    let queue = try context.requireQueue()
+    // Resolve and validate everything before encoding so a bad id never leaves a half-encoded buffer.
+    let resolved = try steps.map { step -> ResolvedComputeStep in
+      let pipeline = try computePipelines.get(step.pipelineId)
+      let size = (step.threadgroups ?? step.threads ?? SizeRecord()).mtlSize
+      guard size.width > 0, size.height > 0, size.depth > 0 else {
+        throw MetalKitError.invalidArgument("threadgroups/threads dimensions must be greater than 0.")
+      }
+      let fallback =
+        step.threads != nil
+        ? defaultThreadsPerThreadgroup(pipeline, grid: size)
+        : MTLSize(width: min(pipeline.threadExecutionWidth, pipeline.maxTotalThreadsPerThreadgroup), height: 1, depth: 1)
+      let group = step.threadsPerThreadgroup?.mtlSize ?? fallback
+      try validateThreadgroup(group, pipeline: pipeline)
+      return ResolvedComputeStep(
+        pipeline: pipeline,
+        buffers: try step.buffers.map { try buffers.get($0) },
+        textures: try step.textures.map { try textures.get($0) },
+        step: step,
+        group: group)
     }
-    return NativeComputeDispatchResult(
-      gpuTimeMs: gpuTime,
-      cpuTimeMs: cpuTime,
-      threadgroups: NativeSize(width: Double(groups.width), height: Double(groups.height), depth: Double(groups.depth)),
-      threadsPerThreadgroup: NativeSize(
-        width: Double(perGroup.width), height: Double(perGroup.height), depth: Double(perGroup.depth)))
+
+    guard let commandBuffer = queue.makeCommandBuffer(), let encoder = commandBuffer.makeComputeCommandEncoder() else {
+      throw MetalKitError.gpu("Failed to create a compute command encoder.")
+    }
+    var dispatchCount = 0
+    for item in resolved {
+      encoder.setComputePipelineState(item.pipeline)
+      for (index, buffer) in item.buffers.enumerated() {
+        encoder.setBuffer(buffer, offset: 0, index: index)
+      }
+      for (index, texture) in item.textures.enumerated() {
+        encoder.setTexture(texture, index: index)
+      }
+      for _ in 0..<item.step.repeatCount {
+        if let groups = item.step.threadgroups {
+          encoder.dispatchThreadgroups(groups.mtlSize, threadsPerThreadgroup: item.group)
+        } else if let threads = item.step.threads {
+          encodeDispatch(encoder, device: device, grid: threads.mtlSize, threadsPerThreadgroup: item.group)
+        }
+        dispatchCount += 1
+      }
+    }
+    encoder.endEncoding()
+
+    let count = dispatchCount
+    let cpuStart = CACurrentMediaTime()
+    commandBuffer.addCompletedHandler { buffer in
+      let cpuTime = (CACurrentMediaTime() - cpuStart) * 1000
+      if buffer.status == .error {
+        promise.reject(
+          withError: MetalKitError.gpu("Compute batch failed: \(buffer.error?.localizedDescription ?? "unknown error")"))
+        return
+      }
+      let gpuTime = gpuTimeMs(of: buffer)
+      if let gpuTime {
+        PerformanceStats.shared.recordCompute(gpuTimeMs: gpuTime)
+      }
+      promise.resolve(
+        withResult: NativeComputeBatchResult(gpuTimeMs: gpuTime, cpuTimeMs: cpuTime, dispatchCount: Double(count)))
+    }
+    commandBuffer.commit()
+  }
+
+  private func validateThreadgroup(_ group: MTLSize, pipeline: MTLComputePipelineState) throws {
+    let threadsPerGroup = group.width * group.height * group.depth
+    guard group.width > 0, group.height > 0, group.depth > 0,
+      threadsPerGroup <= pipeline.maxTotalThreadsPerThreadgroup
+    else {
+      throw MetalKitError.invalidArgument(
+        "threadsPerThreadgroup (\(threadsPerGroup) threads) must be between 1 and \(pipeline.maxTotalThreadsPerThreadgroup).")
+    }
   }
 
   // MARK: Render pipelines
@@ -730,8 +905,14 @@ final class HybridMunimMetalkit: HybridMunimMetalkitSpec, @unchecked Sendable {
     } catch {
       throw MetalKitError.gpu("Failed to create render pipeline: \(error.localizedDescription)")
     }
+    let entry = RenderPipelineEntry(
+      state: state,
+      colorPixelFormat: descriptor.colorAttachments[0].pixelFormat,
+      depthPixelFormat: descriptor.depthAttachmentPixelFormat,
+      stencilPixelFormat: descriptor.stencilAttachmentPixelFormat,
+      sampleCount: record.sampleCount)
     return NativeRenderPipelineState(
-      id: renderPipelines.insert(state),
+      id: renderPipelines.insert(entry, owner: owner),
       vertexFunction: record.vertexFunction,
       fragmentFunction: record.fragmentFunction ?? "",
       colorAttachments: attachments.map {

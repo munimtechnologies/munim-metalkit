@@ -39,8 +39,18 @@ final class MetalContext: @unchecked Sendable {
 
 /// Thread-safe id -> resource map. Async functions run concurrently on background queues,
 /// so every registry access goes through a lock.
+///
+/// The registries are process-wide (see `MetalStore`) so that a `MunimMetalkitView` can bind
+/// buffers, textures and pipelines by the ids JavaScript got from the module. Every entry records
+/// the module instance that created it, so a module that is torn down (e.g. on a JavaScript
+/// reload) only releases its own resources.
 final class ResourceRegistry<Value>: @unchecked Sendable {
-  private var items: [String: Value] = [:]
+  private struct Entry {
+    let value: Value
+    let owner: ObjectIdentifier
+  }
+
+  private var items: [String: Entry] = [:]
   private let lock = NSLock()
   let kind: String
 
@@ -48,14 +58,14 @@ final class ResourceRegistry<Value>: @unchecked Sendable {
     self.kind = kind
   }
 
-  func insert(_ value: Value) -> String {
+  func insert(_ value: Value, owner: ObjectIdentifier) -> String {
     let id = UUID().uuidString
-    lock.withLock { items[id] = value }
+    lock.withLock { items[id] = Entry(value: value, owner: owner) }
     return id
   }
 
   func get(_ id: String) throws -> Value {
-    guard let value = lock.withLock({ items[id] }) else {
+    guard let value = lock.withLock({ items[id]?.value }) else {
       throw MetalKitError.notFound(kind: kind, id: id)
     }
     return value
@@ -66,13 +76,64 @@ final class ResourceRegistry<Value>: @unchecked Sendable {
     return lock.withLock { items.removeValue(forKey: id) != nil }
   }
 
-  var count: Int {
-    return lock.withLock { items.count }
+  func count(owner: ObjectIdentifier) -> Int {
+    return lock.withLock { items.values.reduce(0) { $0 + ($1.owner == owner ? 1 : 0) } }
   }
 
-  func removeAll() {
-    lock.withLock { items.removeAll() }
+  func removeAll(owner: ObjectIdentifier) {
+    lock.withLock { items = items.filter { $0.value.owner != owner } }
   }
+}
+
+/// A render pipeline plus the attachment layout it was built for, so a view can check that the
+/// pipeline matches its render target before drawing with it (a mismatch is a Metal validation
+/// error, not a recoverable one).
+struct RenderPipelineEntry {
+  let state: MTLRenderPipelineState
+  let colorPixelFormat: MTLPixelFormat
+  let depthPixelFormat: MTLPixelFormat
+  let stencilPixelFormat: MTLPixelFormat
+  let sampleCount: Int
+}
+
+/// Process-wide resource registries shared by the module and the views.
+final class MetalStore: @unchecked Sendable {
+  static let shared = MetalStore()
+
+  let textures = ResourceRegistry<MTLTexture>(kind: "texture")
+  let buffers = ResourceRegistry<MTLBuffer>(kind: "buffer")
+  let libraries = ResourceRegistry<MTLLibrary>(kind: "shader library")
+  let computePipelines = ResourceRegistry<MTLComputePipelineState>(kind: "compute pipeline")
+  let renderPipelines = ResourceRegistry<RenderPipelineEntry>(kind: "render pipeline")
+
+  func removeAll(owner: ObjectIdentifier) {
+    textures.removeAll(owner: owner)
+    buffers.removeAll(owner: owner)
+    libraries.removeAll(owner: owner)
+    computePipelines.removeAll(owner: owner)
+    renderPipelines.removeAll(owner: owner)
+  }
+}
+
+// MARK: - Binding indices shared with shaders
+
+/// Buffer index of the per-frame `MunimFrame` struct in view shaders (vertex, fragment, kernel).
+let frameUniformsIndex = 30
+/// Buffer index of the view's `uniformBufferId` snapshot.
+let uniformsIndex = 29
+/// `buffers[i]` is bound at `[[buffer(i)]]`, so at most this many buffers fit below the two above.
+let maxViewBuffers = 29
+/// Textures bound per stage (`[[texture(0)]]` ... `[[texture(30)]]`).
+let maxViewTextures = 31
+
+/// Layout-compatible with the MSL struct documented in the README (`MunimFrame`):
+/// `float time; float deltaTime; float2 resolution; uint frameIndex; float renderScale;` (24 bytes).
+struct FrameUniforms {
+  var time: Float = 0
+  var deltaTime: Float = 0
+  var resolution = SIMD2<Float>(0, 0)
+  var frameIndex: UInt32 = 0
+  var renderScale: Float = 1
 }
 
 // MARK: - Performance stats
@@ -196,12 +257,23 @@ enum MetalKitError {
 
 /// Background queue for the module's async work. Metal objects and the registries are
 /// thread-safe, so work runs concurrently (as Expo's async functions did).
-private let workQueue = DispatchQueue(label: "munim-metalkit.work", qos: .userInitiated, attributes: .concurrent)
+let metalWorkQueue = DispatchQueue(label: "munim-metalkit.work", qos: .userInitiated, attributes: .concurrent)
+
+/// Runs `body` synchronously (on the calling, JavaScript, thread) and returns an already settled
+/// promise. Used for cheap operations whose input is only valid during the call (a borrowed
+/// JavaScript ArrayBuffer), so the bytes are copied once, straight into Metal memory.
+func settledNow<T>(_ body: () throws -> T) -> Promise<T> {
+  do {
+    return Promise.resolved(withResult: try body())
+  } catch {
+    return Promise.rejected(withError: MetalKitError.wrap(error))
+  }
+}
 
 /// Runs `body` off the JavaScript thread and settles a Nitro promise with its result.
 func runAsync<T>(_ body: @escaping () throws -> T) -> Promise<T> {
   let promise = Promise<T>()
-  workQueue.async {
+  metalWorkQueue.async {
     do {
       promise.resolve(withResult: try body())
     } catch {
@@ -366,6 +438,17 @@ enum MetalParsing {
     case "Source1Alpha": return .source1Alpha
     case "OneMinusSource1Alpha": return .oneMinusSource1Alpha
     case let other?: throw MetalKitError.invalidArgument("Unknown blend factor '\(other)'.")
+    }
+  }
+
+  static func primitiveType(_ name: String?) throws -> MTLPrimitiveType {
+    switch name {
+    case nil, "Triangle": return .triangle
+    case "TriangleStrip": return .triangleStrip
+    case "Line": return .line
+    case "LineStrip": return .lineStrip
+    case "Point": return .point
+    case let other?: throw MetalKitError.invalidArgument("Unknown primitive type '\(other)'.")
     }
   }
 
@@ -538,6 +621,61 @@ struct RenderPipelineDescriptorRecord {
     alphaToCoverageEnabled = descriptor.alphaToCoverageEnabled ?? false
     alphaToOneEnabled = descriptor.alphaToOneEnabled ?? false
     rasterizationEnabled = descriptor.rasterizationEnabled ?? true
+  }
+}
+
+/// One step of `dispatchComputeBatch`. Exactly one of `threadgroups` / `threads` is set.
+struct ComputeStepRecord {
+  var pipelineId: String
+  var buffers: [String]
+  var textures: [String]
+  var threadgroups: SizeRecord?
+  var threads: SizeRecord?
+  var threadsPerThreadgroup: SizeRecord?
+  var repeatCount: Int
+
+  init(_ step: NativeComputeStep) throws {
+    pipelineId = step.pipelineId
+    buffers = step.buffers ?? []
+    textures = step.textures ?? []
+    threadgroups = try step.threadgroups.map { try SizeRecord($0) }
+    threads = try step.threads.map { try SizeRecord($0) }
+    threadsPerThreadgroup = try step.threadsPerThreadgroup.map { try SizeRecord($0) }
+    repeatCount = try intArg(step.repeatCount, "repeatCount", default: 1)
+    guard (threadgroups == nil) != (threads == nil) else {
+      throw MetalKitError.invalidArgument("Each compute step needs exactly one of 'threadgroups' or 'threads'.")
+    }
+    guard repeatCount >= 1, repeatCount <= 100_000 else {
+      throw MetalKitError.invalidArgument("repeatCount must be between 1 and 100000.")
+    }
+  }
+}
+
+/// A threadgroup shape for `pipeline` that covers a grid of `grid` threads efficiently:
+/// a full SIMD-width row (times as many rows as fit) for 2D/3D grids, the widest group for 1D grids.
+func defaultThreadsPerThreadgroup(_ pipeline: MTLComputePipelineState, grid: MTLSize) -> MTLSize {
+  let width = max(1, pipeline.threadExecutionWidth)
+  let maxTotal = max(1, pipeline.maxTotalThreadsPerThreadgroup)
+  if grid.height <= 1 && grid.depth <= 1 {
+    return MTLSize(width: min(maxTotal, max(1, grid.width)), height: 1, depth: 1)
+  }
+  let rows = max(1, min(maxTotal / width, grid.height))
+  return MTLSize(width: min(width, max(1, grid.width)), height: rows, depth: 1)
+}
+
+/// Encodes a dispatch of exactly `grid` threads. Apple4+ GPUs (every device iOS 16.4 runs on)
+/// support non-uniform threadgroups; anything else gets whole threadgroups and must bounds-check.
+func encodeDispatch(
+  _ encoder: MTLComputeCommandEncoder, device: MTLDevice, grid: MTLSize, threadsPerThreadgroup group: MTLSize
+) {
+  if let family = GPUFamilies.appleFamily(4), device.supportsFamily(family) {
+    encoder.dispatchThreads(grid, threadsPerThreadgroup: group)
+  } else {
+    let groups = MTLSize(
+      width: (grid.width + group.width - 1) / group.width,
+      height: (grid.height + group.height - 1) / group.height,
+      depth: (grid.depth + group.depth - 1) / group.depth)
+    encoder.dispatchThreadgroups(groups, threadsPerThreadgroup: group)
   }
 }
 

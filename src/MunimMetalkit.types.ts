@@ -116,6 +116,16 @@ export type MetalCapabilities = {
   residencySets: boolean;
   /** `supportsRaytracing`. */
   raytracing: boolean;
+  /** MetalFX spatial upscaling (used by the view's `renderScale`). */
+  metalFXSpatial: boolean;
+  /** MetalFX temporal upscaling is supported by the device. */
+  metalFXTemporal: boolean;
+  /** MetalFX frame interpolation (iOS 26+) is supported by the device. */
+  metalFXFrameInterpolation: boolean;
+  /** Object/mesh shader stages (Apple7 / A14 and newer). */
+  meshShaders: boolean;
+  /** `dispatchThreads` with non-uniform threadgroups (Apple4 / A11 and newer). */
+  nonUniformThreadgroups: boolean;
   /** Why `metal4` is false, when it is. */
   unsupportedReason?: string;
 };
@@ -218,6 +228,36 @@ export type DispatchComputeOptions = {
   threadsPerThreadgroup?: ThreadSize;
   /** Texture ids bound at `[[texture(0)]]`, `[[texture(1)]]`, ... */
   textures?: string[];
+};
+
+/**
+ * One step of `dispatchComputeBatch`. Give exactly one of `threadgroups` (whole threadgroups, like
+ * `dispatchCompute`) or `threads` (an exact grid of threads; edge threadgroups are trimmed).
+ */
+export type ComputeStep = {
+  pipelineId: string;
+  /** Bound at `[[buffer(i)]]`. */
+  buffers?: string[];
+  /** Bound at `[[texture(i)]]`. */
+  textures?: string[];
+  threadgroups?: ThreadSize;
+  threads?: ThreadSize;
+  /**
+   * Defaults to the pipeline's `threadExecutionWidth` for `threadgroups`, and to a shape that fills
+   * `maxTotalThreadsPerThreadgroup` for `threads`.
+   */
+  threadsPerThreadgroup?: ThreadSize;
+  /** Encode this step this many times in a row (e.g. simulation iterations). Defaults to 1. */
+  repeatCount?: number;
+};
+
+export type ComputeBatchResult = {
+  /** GPU time of the whole command buffer, or null if unavailable. */
+  gpuTimeMs: number | null;
+  /** Time from commit to completion. */
+  cpuTimeMs: number;
+  /** Dispatches encoded (sum of every step's `repeatCount`). */
+  dispatchCount: number;
 };
 
 export type ComputeDispatchResult = {
@@ -540,6 +580,10 @@ export type MunimMetalkitViewProps = {
   style?: StyleProp<ViewStyle>;
 
   // Rendering props (applied to the underlying MTKView)
+  /**
+   * Display-link rate. Defaults to 60; `0` means the screen's maximum (120 on ProMotion displays;
+   * iPhones also need `CADisableMinimumFrameDurationOnPhone` in Info.plist for more than 60).
+   */
   preferredFramesPerSecond?: number;
   /** When true the view only redraws on demand (MTKView semantics). Defaults to false. */
   enableSetNeedsDisplay?: boolean;
@@ -552,6 +596,46 @@ export type MunimMetalkitViewProps = {
   depthStencilPixelFormat?: MTLPixelFormat;
   sampleCount?: number;
   clearColor?: { red: number; green: number; blue: number; alpha: number };
+
+  // Custom rendering (iOS). Everything below runs natively on every display-link frame; JavaScript
+  // is not called per frame. Resources are retained by the view while bound.
+
+  /**
+   * A pipeline from `createRenderPipelineState` to draw with instead of the built-in shader. Its
+   * color attachment must match `colorPixelFormat` and its `sampleCount` the view's; its depth
+   * format must be unset or equal to `depthStencilPixelFormat` (with depth, the view tests
+   * `less` and writes depth).
+   */
+  renderPipelineId?: string;
+  /** Vertices per draw (`drawPrimitives`). Defaults to 3 (one fullscreen triangle). */
+  vertexCount?: number;
+  /** Instances per draw. Defaults to 1. */
+  instanceCount?: number;
+  /** Defaults to `"Triangle"`. */
+  primitiveType?: MTLPrimitiveType;
+  /**
+   * A compute pipeline dispatched every frame before the render pass, with the same bindings as
+   * the render pipeline (e.g. simulate particles, or write a texture the fragment shader samples).
+   */
+  computePipelineId?: string;
+  /** Threads of the per-frame compute dispatch. Defaults to one thread per render-target pixel. */
+  computeThreads?: ThreadSize;
+  /** Buffer ids bound at `[[buffer(i)]]` in the vertex, fragment and compute stages (at most 29). */
+  buffers?: string[];
+  /** Texture ids bound at `[[texture(i)]]` in the vertex, fragment and compute stages. */
+  textures?: string[];
+  /**
+   * A Shared buffer whose contents are snapshotted every frame and bound at
+   * `[[buffer(UNIFORMS_INDEX)]]` (29). Write it from JavaScript with `mapBuffer` (no native call)
+   * or `updateBuffer`; frames already in flight keep their own copy (triple-buffered).
+   */
+  uniformBufferId?: string;
+  /**
+   * Render at this fraction of the drawable size (0 < scale <= 1) and upscale to full size with
+   * MetalFX spatial upscaling. Reports `ERR_UNSUPPORTED` through `onError` and renders at full size
+   * where MetalFX is unavailable (Simulator, older GPUs) or with `sampleCount` > 1. Defaults to 1.
+   */
+  renderScale?: number;
 
   // Event handlers
   onLoad?: (event: { nativeEvent: OnLoadEventPayload }) => void;

@@ -12,8 +12,10 @@ import type {
   Canvas2D,
   Circle2D,
   Color2D,
+  ComputeBatchResult,
   ComputeDispatchResult,
   ComputePipelineState,
+  ComputeStep,
   DeviceInfo,
   DispatchComputeOptions,
   DrawingLayer,
@@ -43,12 +45,20 @@ import type {
   TextureTransferOptions,
   ThreadSize,
 } from "./MunimMetalkit.types";
-import { call, makeError, toArrayBuffer, toScreenshot } from "./internal";
+import {
+  call,
+  callSync,
+  makeError,
+  toArrayBuffer,
+  toScreenshot,
+} from "./internal";
 import { NOT_IMPLEMENTED_METHOD_NAMES } from "./methodNames";
 import type {
   MunimMetalkit as MunimMetalkitSpec,
   NativeBuffer,
+  NativeComputeBatchResult,
   NativeComputeDispatchResult,
+  NativeComputeStep,
   NativeDeviceInfo,
   NativeMetalCapabilities,
   NativePerformanceInfo,
@@ -143,7 +153,18 @@ export declare class MunimMetalkitModule {
     data: BinaryData,
     offset?: number,
   ): Promise<void>;
+  /** Copies the buffer's contents into a new ArrayBuffer (works for Shared and Private buffers). */
   getBufferContents(bufferId: string): Promise<ArrayBuffer>;
+  /**
+   * Returns an ArrayBuffer that **is** the Shared buffer's memory (no copy, no promise). Reads and
+   * writes through a typed array over it go straight to the GPU-visible memory, so per-frame data
+   * (e.g. a view's `uniformBufferId`) can be updated without any native call. The mapping keeps the
+   * Metal buffer alive until it is garbage-collected, even after `releaseBuffer`. Throws
+   * `ERR_INVALID_ARGUMENT` for Private buffers. Writes are not synchronised with GPU work that is
+   * already running; the view snapshots `uniformBufferId` per frame, and compute results are
+   * complete once `dispatchCompute` resolves.
+   */
+  mapBuffer(bufferId: string): ArrayBuffer;
   releaseBuffer(bufferId: string): Promise<void>;
 
   // Shaders and pipelines
@@ -172,8 +193,14 @@ export declare class MunimMetalkitModule {
     options?: DispatchComputeOptions,
   ): Promise<ComputeDispatchResult>;
   /**
-   * Builds (and validates) a render pipeline from vertex + fragment functions. There is no JS draw
-   * API yet, so the pipeline cannot be used for drawing from JavaScript.
+   * Encodes several dispatches (each step `repeatCount` times) into one command buffer, runs them
+   * in order and resolves once. Use it instead of awaiting `dispatchCompute` in a loop: one native
+   * call and one GPU submission for the whole sequence.
+   */
+  dispatchComputeBatch(steps: ComputeStep[]): Promise<ComputeBatchResult>;
+  /**
+   * Builds (and validates) a render pipeline from vertex + fragment functions. Draw with it by
+   * passing its `id` to `<MunimMetalkitView renderPipelineId>`.
    */
   createRenderPipelineState(
     descriptor: ShaderDescriptor,
@@ -448,6 +475,11 @@ function toCapabilities(caps: NativeMetalCapabilities): MetalCapabilities {
     tensors: caps.tensors,
     residencySets: caps.residencySets,
     raytracing: caps.raytracing,
+    metalFXSpatial: caps.metalFXSpatial,
+    metalFXTemporal: caps.metalFXTemporal,
+    metalFXFrameInterpolation: caps.metalFXFrameInterpolation,
+    meshShaders: caps.meshShaders,
+    nonUniformThreadgroups: caps.nonUniformThreadgroups,
   };
   if (caps.unsupportedReason !== undefined) {
     result.unsupportedReason = caps.unsupportedReason;
@@ -478,6 +510,26 @@ function toDispatchResult(
     cpuTimeMs: result.cpuTimeMs,
     threadgroups: { ...result.threadgroups },
     threadsPerThreadgroup: { ...result.threadsPerThreadgroup },
+  };
+}
+
+function toBatchResult(result: NativeComputeBatchResult): ComputeBatchResult {
+  return {
+    gpuTimeMs: nullable(result.gpuTimeMs),
+    cpuTimeMs: result.cpuTimeMs,
+    dispatchCount: result.dispatchCount,
+  };
+}
+
+function toComputeStep(step: ComputeStep): NativeComputeStep {
+  return {
+    pipelineId: step.pipelineId,
+    buffers: step.buffers,
+    textures: step.textures,
+    threadgroups: step.threadgroups,
+    threads: step.threads,
+    threadsPerThreadgroup: step.threadsPerThreadgroup,
+    repeatCount: step.repeatCount,
   };
 }
 
@@ -638,6 +690,7 @@ const MunimMetalkit = {
     call(() => native.updateBuffer(bufferId, toArrayBuffer(data), offset)),
   getBufferContents: (bufferId: string) =>
     call(() => native.getBufferContents(bufferId)),
+  mapBuffer: (bufferId: string) => callSync(() => native.mapBuffer(bufferId)),
   releaseBuffer: (bufferId: string) =>
     call(() => native.releaseBuffer(bufferId)),
 
@@ -668,6 +721,10 @@ const MunimMetalkit = {
           options,
         ),
       ),
+    ),
+  dispatchComputeBatch: (steps: ComputeStep[]) =>
+    call(async () =>
+      toBatchResult(await native.dispatchComputeBatch(steps.map(toComputeStep))),
     ),
   createRenderPipelineState: (descriptor: ShaderDescriptor) =>
     call(async () =>
