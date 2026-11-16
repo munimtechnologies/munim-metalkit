@@ -64,7 +64,6 @@ const MunimMetalkitView = React.forwardRef<
     onLoad,
     onRender,
     onError,
-    ref: _ref,
     ...rest
   } = props;
   // Metal props are converted (structured sizes/colors -> arrays); any other prop (testID,
