@@ -58,12 +58,13 @@ npm run codegen
 # Typecheck, lint and build the package (lib/)
 npm run typecheck
 npm run lint
+npm test        # Jest unit tests (test/)
 npm run build
 ```
 
 ### Running Tests
 
-The example app runs a self-test on launch and logs `MUNIM_METALKIT_SELFTEST {...}`.
+`npm test` runs the Jest unit tests of the TypeScript layer. The example app runs a self-test on launch and logs `MUNIM_METALKIT_SELFTEST {...}`.
 
 ```bash
 cd example
